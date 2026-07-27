@@ -23,3 +23,11 @@ linters:
     - sloglint
     - ineffassign
     - unused
+  exclusions:
+    paths:
+      # Generated gopy/cgo binding output (gapi). Generated code is exempt
+      # from hand-written-code rules (go manifesto); gopy's header lacks the
+      # canonical "Code generated ... DO NOT EDIT." line, so golangci does
+      # not auto-exempt it. This excludes LINT findings only - compile
+      # (typecheck) failures in the package still surface via mage test.
+      - adk/python/gapi/native
