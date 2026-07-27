@@ -1,0 +1,25 @@
+# Shared golangci-lint configuration for the goppydae ecosystem.
+# Consumed by every repo's Lint target via magelib.SharedLintConfig().
+#
+# The linter set is pinned by name (go manifesto section 12): the standard
+# correctness set plus sloglint. Carve-outs are rule-level and documented
+# here -- never per-line //nolint directives.
+#
+# Known honest red: sloglint fires on the tracked logging divergences
+# (gapi DIV-003: zerolog; goblin DIV-003: stdlib log). Those stay open in the
+# divergence ledgers; do not silence them here.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - errorlint
+    - bodyclose
+    - sqlclosecheck
+    - rowserrcheck
+    - sloglint
+    - ineffassign
+    - unused

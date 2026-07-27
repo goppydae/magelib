@@ -1,0 +1,17 @@
+# --- OS / IDE Junk ---
+.DS_Store
+.idea/
+.vscode/
+.bin/
+*~
+
+# --- Go Binaries and Build Output ---
+bin/
+*.test
+
+# --- Nix Build Outputs ---
+result/
+
+# --- Temporary / Runtime State ---
+tmp/
+*.log
