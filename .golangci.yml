@@ -5,13 +5,19 @@
 # correctness set plus sloglint. Carve-outs are rule-level and documented
 # here -- never per-line //nolint directives.
 #
-# Known honest red: sloglint fires on the tracked logging divergences
-# (gapi DIV-003: zerolog; goblin DIV-003: stdlib log). Those stay open in the
-# divergence ledgers; do not silence them here.
+# sloglint enforces the manifesto section 8 logging style: slog with
+# attribute arguments only (typed constructors from each repo's
+# internal/logattr), never loose key-value pairs. The DIV-003 logging
+# divergences are resolved; any sloglint finding is a real style break.
 version: "2"
 
 linters:
   default: none
+  settings:
+    sloglint:
+      # LogAttrs + typed attribute constructors; loose "key", value
+      # pairs are a compile-time-invisible failure mode (manifesto s8).
+      attr-only: true
   enable:
     - errcheck
     - govet
