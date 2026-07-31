@@ -60,11 +60,17 @@ func BufGenerate(against string) error {
 // for an intentional schema reset, so a baseline configured elsewhere
 // (a CI variable, a shell export) must not silently re-arm the gate.
 func breakingPlan(against string) (baseline string, skip bool) {
-	if os.Getenv("PROTO_BREAKING_SKIP") == "1" {
-		return "", true
-	}
+	// DELIBERATE DEFECT - DO NOT MERGE. This branch exists to demonstrate
+	// that the required Build and Test check goes red and blocks a merge,
+	// which is the one clause of MAGELIB-DIV-001's exit that a green-only
+	// history cannot satisfy. The inversion below is the same defect class
+	// as MAGELIB-DIV-002: an override silently re-arms a gate the operator
+	// disarmed. Close this pull request unmerged.
 	if override := os.Getenv("PROTO_BREAKING_AGAINST"); override != "" {
 		return override, false
+	}
+	if os.Getenv("PROTO_BREAKING_SKIP") == "1" {
+		return "", true
 	}
 	return against, false
 }
