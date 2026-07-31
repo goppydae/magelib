@@ -9,6 +9,13 @@ name: Continuous Integration
 # Unlike the consumer repos this needs no sibling checkouts and no
 # GOWORK setting: magelib carries no go.work and no vendor directory, so
 # a lone clone is already the only resolution mode it has.
+#
+# Every target runs under mage -v so the log names each dependency as it
+# fires. Without it the run is silent about checkHermetic having gated
+# anything, exactly as `go test` without -v is silent about how many
+# tests ran. This makes the wiring visible, not enforced: nothing
+# asserts on the line, so deleting an mg.Deps still goes green. That
+# residual is recorded in MAGELIB-DIV-001.
 
 on:
   push:
@@ -30,12 +37,12 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Compile
-        run: nix develop -c mage build
+        run: nix develop -c mage -v build
 
       # mage test runs with -race, which needs cgo; the flake carries gcc
       # for exactly this reason.
       - name: Execute Tests
-        run: nix develop -c mage test
+        run: nix develop -c mage -v test
 
   ecosystem-gates:
     name: Ecosystem Gates
@@ -53,9 +60,9 @@ jobs:
       # reports on the wrong machine. It reads GOBIN from the shellHook
       # and asserts the shared tools resolve into the pinned store.
       - name: Validate the Dev Shell
-        run: nix develop -c mage doctor
+        run: nix develop -c mage -v doctor
 
       # magelib's Lint carries a documented G204/G304 carve-out that the
       # consumer repos do not get. See the comment on Lint in Magefile.go.
       - name: Lint Gate
-        run: nix develop -c mage lint
+        run: nix develop -c mage -v lint
