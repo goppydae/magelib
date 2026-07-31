@@ -7,11 +7,30 @@ import (
 	"fmt"
 
 	"github.com/goppydae/magelib/pkg/magelib"
+	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
 )
 
+// checkHermetic ensures tools are running from Nix store.
+//
+// magelib is the repo that implements this check for the whole ecosystem,
+// and it was the only repo not subject to it: gapi and goblin gate their
+// targets on CheckHermetic while magelib's own Build, Test and Lint went
+// straight to the tools. A build library that does not hold itself to its
+// own rule is exactly the failure MAGELIB-DIV-001 names, so the gate now
+// applies here first.
+//
+// Deliberately not applied to Doctor: doctor exists to diagnose a machine
+// in the wrong gear, and refusing to run on that machine would make the
+// diagnostic unavailable precisely when it is needed. Fmt and Tidy are
+// likewise ungated - they are source hygiene, not builds.
+func checkHermetic() error {
+	return magelib.CheckHermetic()
+}
+
 // Build compiles the library (magelib ships no binaries).
 func Build() error {
+	mg.Deps(checkHermetic)
 	fmt.Println("Building magelib...")
 	return sh.RunV("go", "build", "./...")
 }
@@ -24,6 +43,7 @@ func Build() error {
 // CI run showing a non-zero test count, and the package summary cannot
 // show one. See the operator field guide, section 5 item 4.
 func Test() error {
+	mg.Deps(checkHermetic)
 	return sh.RunV("go", "test", "-race", "-v", "./...")
 }
 
@@ -46,6 +66,7 @@ func Tidy() error {
 // via variable) flag that purpose itself, so they are excluded for this repo
 // only. Consumer repos call magelib.Lint() with no excludes and stay strict.
 func Lint() error {
+	mg.Deps(checkHermetic)
 	return magelib.Lint("G204", "G304")
 }
 
