@@ -11,6 +11,16 @@ import (
 	"github.com/magefile/mage/sh"
 )
 
+// toolchain is this repo's single declaration of what the dev shell must
+// provide. Doctor reports on it and checkHermetic gates on it, so the
+// advisory check and the enforcing one read one value and cannot drift:
+// MAGELIB-DIV-003 is exactly the drift that two declarations produce.
+var toolchain = magelib.DoctorConfig{
+	ProtoPlugins: []string{"buf", "protoc-gen-go", "protoc-gen-go-grpc"},
+	RequiredEnv:  []string{"GOBIN"},
+	SharedTools:  []string{"buf", "golangci-lint", "gosec", "govulncheck", "mage", "goimports"},
+}
+
 // checkHermetic ensures tools are running from Nix store.
 //
 // magelib is the repo that implements this check for the whole ecosystem,
@@ -25,7 +35,7 @@ import (
 // diagnostic unavailable precisely when it is needed. Fmt and Tidy are
 // likewise ungated - they are source hygiene, not builds.
 func checkHermetic() error {
-	return magelib.CheckHermetic()
+	return magelib.CheckHermetic(toolchain.SharedTools...)
 }
 
 // Build compiles the library (magelib ships no binaries).
@@ -72,9 +82,5 @@ func Lint() error {
 
 // Doctor validates the dev shell against the ecosystem pins.
 func Doctor() error {
-	return magelib.Doctor(magelib.DoctorConfig{
-		ProtoPlugins: []string{"buf", "protoc-gen-go", "protoc-gen-go-grpc"},
-		RequiredEnv:  []string{"GOBIN"},
-		SharedTools:  []string{"buf", "golangci-lint", "gosec", "govulncheck", "mage", "goimports"},
-	})
+	return magelib.Doctor(toolchain)
 }
