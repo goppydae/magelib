@@ -24,6 +24,6 @@ pkgs.mkShell {
     export PATH=$GOBIN:$PATH
 
     echo "magelib - shared mage build helpers for the goppydae ecosystem"
-    echo "Consumed by ../gapi and ../goblin via replace directives."
+    echo "Consumed by ../gapi and ../goblin via their committed go.work."
   '';
 }

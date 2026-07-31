@@ -7,20 +7,30 @@ resolution.
 
 ## Position in the silo
 
-This repo is a sibling of the two code repos and is consumed through a local
-`replace` directive, the same mechanism that couples the orchestrator to the
-kernel:
+This repo is a sibling of the two code repos and is consumed through their
+committed `go.work`, the same mechanism that couples the orchestrator to the
+kernel. It is deliberately **not** a `replace` directive - goblin's CI carries a
+required "No-Replace Module Resolution" job that exists to keep it that way:
 
 ```
 workspace/
-  gapi/     replace github.com/goppydae/magelib => ../magelib
-  goblin/   replace github.com/goppydae/gapi    => ../gapi
-            replace github.com/goppydae/magelib => ../magelib
+  gapi/     go.work: use (. ../magelib)
+            go.mod:  github.com/goppydae/magelib vX.Y.Z
+  goblin/   go.work: use (. ../gapi ../magelib)
+            go.mod:  github.com/goppydae/gapi, github.com/goppydae/magelib
   magelib/  (this repo)
 ```
 
-The sibling layout is load-bearing: a lone clone of a consumer repo does not
-build its magefile. The extraction of these helpers out of the kernel repo was
+Each consumer pins a published tag in `go.mod` and overrides it locally through
+`go.work`. That split is what makes both modes work: dev work in the silo
+resolves from the sibling checkout, and a lone clone builds from the module
+proxy with `GOWORK=off` - which is also how CI builds, so a magelib change is
+not live in CI until this repo is re-tagged and the consumer re-vendored.
+
+The sibling layout is load-bearing for dev work: without it, `go.work` has
+nothing to point at and a consumer silently falls back to the pinned tag, which
+may be older than the working tree next door. The extraction of these helpers
+out of the kernel repo was
 triggered by the written rule in the ecosystem manifesto (section 7): the
 helpers move to their own repo when a third repo joins the ecosystem or when a
 tagged release needs build helpers pinned independently of the kernel cadence.
