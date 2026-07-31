@@ -1,0 +1,61 @@
+name: Continuous Integration
+
+# magelib is the shared build library both code repos vendor. Until this
+# workflow existed the library's own tests ran nowhere automatically: a
+# defect in the lint gate, the doctor checks, or the terminology rules
+# reached gapi and goblin through a tag, and the first thing to notice
+# was a consumer's red build. See MAGELIB-DIV-001.
+#
+# Unlike the consumer repos this needs no sibling checkouts and no
+# GOWORK setting: magelib carries no go.work and no vendor directory, so
+# a lone clone is already the only resolution mode it has.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Synchronize Environment (Nix)
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Compile
+        run: nix develop -c mage build
+
+      # mage test runs with -race, which needs cgo; the flake carries gcc
+      # for exactly this reason.
+      - name: Execute Tests
+        run: nix develop -c mage test
+
+  ecosystem-gates:
+    name: Ecosystem Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Synchronize Environment (Nix)
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      # Doctor first: a gate that runs against an unverified toolchain
+      # reports on the wrong machine. It reads GOBIN from the shellHook
+      # and asserts the shared tools resolve into the pinned store.
+      - name: Validate the Dev Shell
+        run: nix develop -c mage doctor
+
+      # magelib's Lint carries a documented G204/G304 carve-out that the
+      # consumer repos do not get. See the comment on Lint in Magefile.go.
+      - name: Lint Gate
+        run: nix develop -c mage lint

@@ -17,8 +17,14 @@ func Build() error {
 }
 
 // Test runs the test suite with the race detector.
+//
+// -v is load-bearing, not noise. Without it the only output is
+// "ok <pkg> 1.0s", which a package whose tests all skipped prints
+// identically to one where they all passed. MAGELIB-DIV-001 closes on a
+// CI run showing a non-zero test count, and the package summary cannot
+// show one. See the operator field guide, section 5 item 4.
 func Test() error {
-	return sh.RunV("go", "test", "-race", "./...")
+	return sh.RunV("go", "test", "-race", "-v", "./...")
 }
 
 // Fmt formats all Go code with goimports.
