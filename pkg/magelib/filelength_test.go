@@ -125,7 +125,7 @@ func TestCheckFileLengthSkipsAnExemptPath(t *testing.T) {
 			"native/adk.go": goLines(1312),
 			"native/ok.go":  goLines(10),
 		})
-		if err := CheckFileLength(nil, "native/adk.go"); err != nil {
+		if err := CheckFileLength(nil, Skip{Name: "native/adk.go", Reason: "generated, non-standard header"}); err != nil {
 			t.Fatalf("a skipped file was measured: %v", err)
 		}
 	})
@@ -134,7 +134,7 @@ func TestCheckFileLengthSkipsAnExemptPath(t *testing.T) {
 			"a/adk.go": goLines(maxFileLines + 1),
 			"b/adk.go": goLines(maxFileLines + 1),
 		})
-		if err := CheckFileLength(nil, "adk.go"); err != nil {
+		if err := CheckFileLength(nil, Skip{Name: "adk.go", Reason: "gopy output at any depth"}); err != nil {
 			t.Fatalf("a base-name skip did not apply at every depth: %v", err)
 		}
 	})
@@ -142,7 +142,7 @@ func TestCheckFileLengthSkipsAnExemptPath(t *testing.T) {
 		writeTree(t, map[string]string{
 			"third_party/dep/huge.go": goLines(maxFileLines + 800),
 		})
-		if err := CheckFileLength(nil, "third_party"); err != nil {
+		if err := CheckFileLength(nil, Skip{Name: "third_party", Reason: "vendored tree outside skipDirs"}); err != nil {
 			t.Fatalf("a skipped directory was walked: %v", err)
 		}
 	})
@@ -155,12 +155,12 @@ func TestCheckFileLengthSkipsAnExemptPath(t *testing.T) {
 // able to sit in the list forever without rotting it.
 func TestCheckFileLengthDoesNotStaleCheckASkip(t *testing.T) {
 	writeTree(t, map[string]string{"gen/small.go": goLines(12)})
-	if err := CheckFileLength(nil, "gen/small.go"); err != nil {
+	if err := CheckFileLength(nil, Skip{Name: "gen/small.go", Reason: "generated"}); err != nil {
 		t.Fatalf("an under-limit skip was treated as a stale waiver: %v", err)
 	}
 	// Same for a skip that names nothing at all: unlike a waiver, a skip
 	// makes no claim that the path exists today.
-	if err := CheckFileLength(nil, "gen/never-existed.go"); err != nil {
+	if err := CheckFileLength(nil, Skip{Name: "gen/never-existed.go", Reason: "generated, built on demand"}); err != nil {
 		t.Fatalf("a skip on a missing path failed: %v", err)
 	}
 }
@@ -174,7 +174,7 @@ func TestCheckFileLengthRejectsAPathThatIsBothWaiverAndSkip(t *testing.T) {
 	writeTree(t, map[string]string{"native/adk.go": goLines(maxFileLines + 1)})
 	for _, skip := range []string{"native/adk.go", "adk.go"} {
 		t.Run(skip, func(t *testing.T) {
-			err := CheckFileLength([]string{"native/adk.go"}, skip)
+			err := CheckFileLength([]string{"native/adk.go"}, Skip{Name: skip, Reason: "generated"})
 			if err == nil {
 				t.Fatalf("skip %q alongside the same waiver was accepted", skip)
 			}
@@ -258,20 +258,7 @@ func TestCheckFileLengthRejectsUnusableWaivers(t *testing.T) {
 	}
 }
 
-// TestCheckFileLengthRejectsUnusableSkips: same argument as for
-// waivers, plus the worst case - a skip of "." or "./" prunes the
-// entire tree, and a gate that walks nothing reports clean.
-func TestCheckFileLengthRejectsUnusableSkips(t *testing.T) {
-	writeTree(t, map[string]string{"a.go": goLines(maxFileLines + 1)})
-	for _, bad := range []string{"/abs/pkg/a.go", "../gapi/core/a.go", "./", "."} {
-		t.Run(bad, func(t *testing.T) {
-			err := CheckFileLength(nil, bad)
-			if err == nil {
-				t.Fatalf("skip %q was accepted", bad)
-			}
-			if strings.Contains(err.Error(), "file length check failed") {
-				t.Fatalf("skip %q silently pruned instead of erroring: %v", bad, err)
-			}
-		})
-	}
-}
+// Unusable skips are NOT tested here. They are tested across every gate
+// at once in skip_test.go, because a per-gate copy of that table is the
+// same duplication one level up that let the two gates' skip parsing
+// drift apart in the first place (MAGELIB-DIV-004).

@@ -124,7 +124,8 @@ func TestCheckTerminologySkipsVendorAndExtras(t *testing.T) {
 		"vendor/dep/doc.md": "Agent Programming Interface\n",
 		"divergence.jsonl":  "{\"violation\": \"Agent Programming Interface\"}\n",
 	})
-	if err := CheckTerminology([]TerminologyRule{expansionRule}, "divergence.jsonl"); err != nil {
+	if err := CheckTerminology([]TerminologyRule{expansionRule},
+		Skip{Name: "divergence.jsonl", Reason: "the ledger quotes the phrases it is about"}); err != nil {
 		t.Fatalf("skipped paths were walked: %v", err)
 	}
 }
@@ -266,24 +267,10 @@ func TestCheckTerminologyRejectsARuleContainingTheAllowMarker(t *testing.T) {
 	}
 }
 
-// TestCheckTerminologyRejectsUnusableSkips: an absolute or escaping
-// skip matches nothing, and "./" prunes the whole tree. All three are
-// configuration errors, not quiet no-ops.
-func TestCheckTerminologyRejectsUnusableSkips(t *testing.T) {
-	writeTree(t, map[string]string{"a.md": "Agent Programming Interface\n"})
-	rules := []TerminologyRule{{Phrase: "Agent Programming Interface", Reason: "x"}}
-	for _, bad := range []string{"/abs/docs/x.md", "../gapi/docs/x.md", "./"} {
-		t.Run(bad, func(t *testing.T) {
-			err := CheckTerminology(rules, bad)
-			if err == nil {
-				t.Fatalf("skip %q was accepted", bad)
-			}
-			if strings.Contains(err.Error(), "terminology check failed") {
-				t.Fatalf("skip %q silently pruned instead of erroring: %v", bad, err)
-			}
-		})
-	}
-}
+// Unusable skips are NOT tested here. They are tested across every gate
+// at once in skip_test.go, because a per-gate copy of that table is the
+// same duplication one level up that let this gate's skip parsing drift
+// away from CheckFileLength's in the first place (MAGELIB-DIV-004).
 
 // TestCheckTerminologyDoesNotJoinListItems: '-' and '|' at line start
 // are markdown bullets and table cells, not continuation prefixes.
@@ -368,7 +355,7 @@ func TestCheckTerminologyCrossesACommentPrefix(t *testing.T) {
 }
 
 // TestCheckTerminologySkipsByPathAndByName pins the two shapes of an
-// extraSkipNames entry: a bare base name is broad, a '/'-bearing entry
+// Skip.Name: a bare base name is broad, a '/'-bearing entry
 // is exactly one path. Before this, the natural "docs/legacy.md"
 // matched nothing at all and said nothing about it.
 //
@@ -382,7 +369,7 @@ func TestCheckTerminologySkipsByPathAndByName(t *testing.T) {
 		"docs/current.md":    "Agent Programming Interface\n",
 	})
 	err := CheckTerminology([]TerminologyRule{{Phrase: "Agent Programming Interface", Reason: "x"}},
-		"docs/legacy.md")
+		Skip{Name: "docs/legacy.md", Reason: "historical doc kept verbatim"})
 	if err == nil {
 		t.Fatal("current.md should still have been flagged")
 	}
