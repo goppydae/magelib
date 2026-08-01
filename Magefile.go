@@ -38,6 +38,27 @@ func checkHermetic() error {
 	return magelib.CheckHermetic(toolchain.SharedTools...)
 }
 
+// checkFileLength holds magelib to the 500-line rule it ships.
+//
+// magelib deliberately does NOT run CheckTerminology on its own tree -
+// terminology.go and terminology_test.go spell the forbidden phrases in
+// the clear, so the gate would go red against its own rule declaration.
+// This gate has no such problem: it measures files rather than reading
+// them for content, so the implementation can be subject to itself.
+// Dogfooding the gate you ship is the difference between a library that
+// enforces a rule and one that merely exports it, which is the finding
+// MAGELIB-DIV-001 was about.
+//
+// Both lists are empty, and they are different lists. magelib has no
+// file over the limit, so there is no debt to waive; and it has no
+// generated or vendored Go outside the shared skipDirs, so there is
+// nothing the rule does not reach. A repo with debt passes its
+// violations as waivers, which must come back out as the files are
+// split, and its exempt paths as skips, which never do.
+func checkFileLength() error {
+	return magelib.CheckFileLength(nil)
+}
+
 // Build compiles the library (magelib ships no binaries).
 func Build() error {
 	mg.Deps(checkHermetic)
@@ -76,7 +97,7 @@ func Tidy() error {
 // via variable) flag that purpose itself, so they are excluded for this repo
 // only. Consumer repos call magelib.Lint() with no excludes and stay strict.
 func Lint() error {
-	mg.Deps(checkHermetic)
+	mg.Deps(checkHermetic, checkFileLength)
 	return magelib.Lint("G204", "G304")
 }
 
