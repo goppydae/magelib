@@ -56,7 +56,19 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
 
-      # Doctor first: a gate that runs against an unverified toolchain
+      # --all-systems is load-bearing, not thoroughness. A plain
+      # `nix flake check` PASSES on a flake that cannot evaluate for
+      # darwin at all: it omits the incompatible systems, says so in a
+      # warning, and exits 0. So the only operation that can catch a
+      # flake reverting to eachDefaultSystem - which re-enumerates the
+      # x86_64-darwin that nixpkgs 26.11 dropped - is this one. Runs
+      # ahead of doctor because it is upstream of the toolchain: it
+      # evaluates the shells rather than entering one. See
+      # MAGELIB-DIV-005.
+      - name: Evaluate the Flake for Every Declared System
+        run: nix flake check --all-systems
+
+      # Doctor next: a gate that runs against an unverified toolchain
       # reports on the wrong machine. It reads GOBIN from the shellHook
       # and asserts the shared tools resolve into the pinned store.
       - name: Validate the Dev Shell

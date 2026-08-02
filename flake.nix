@@ -7,7 +7,14 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+    # An explicit system list, not eachDefaultSystem: nixpkgs 26.11 dropped
+    # x86_64-darwin, which eachDefaultSystem still enumerates, so merely
+    # instantiating pkgs for that platform throws. gapi hit this first
+    # (GAPI-DIV-035) and goblin followed; this is the same list both carry,
+    # so a reader can check all three at a glance. magelib has no package
+    # output at all, which makes the darwin dev shell the only thing this
+    # list buys here.
+    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ] (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
       in
