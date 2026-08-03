@@ -105,3 +105,23 @@ func Lint() error {
 func Doctor() error {
 	return magelib.Doctor(toolchain)
 }
+
+// CheckVersion gates the VERSION file against the tag being cut.
+//
+// Invoked by release-guard.yml on a tag ref, and by the operator before
+// cutting one:
+//
+//	GITHUB_REF_TYPE=tag GITHUB_REF_NAME=v0.5.2 mage checkVersion
+//
+// Deliberately not a dependency of Lint or Build. It errors off a tag
+// ref by design, so wiring it into a target that runs on every PR would
+// make it either permanently red or - the likelier repair - silenced
+// into the no-op it must never become. See MAGELIB-DIV-006.
+//
+// No mg.Deps(checkHermetic) either: this reads one file and two
+// environment variables and depends on no ecosystem tool, so gating it
+// on the hermetic check would let a dev-shell problem present itself as
+// a version mismatch.
+func CheckVersion() error {
+	return magelib.CheckVersionAgainstTag()
+}
