@@ -10,8 +10,35 @@ bin/
 *.test
 
 # --- Nix Build Outputs ---
-result/
+# No trailing slash: 'nix build' creates result as a SYMLINK to the store
+# path, and a trailing slash matches only directories, so 'result/'
+# ignored nothing nix actually produces. gapi and goblin carried the
+# same defect.
+result
+result-*
 
 # --- Temporary / Runtime State ---
 tmp/
 *.log
+
+# --- TLS / Private Key Material ---
+# UNIFORMITY, not exposure, and worth being honest about which. magelib
+# is a build library: 42 tracked files, no certificate generation, no
+# key material, and no plausible reason to acquire either.
+#
+# The patterns match gapi's and goblin's so all four repos can be
+# reasoned about as one rule rather than "three have it and magelib was
+# judged exempt" - a judgement nobody will remember making.
+*.key
+*.pem
+*.crt
+*.cer
+*.der
+*.csr
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_ecdsa
+id_ed25519
