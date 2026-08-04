@@ -23,6 +23,11 @@ import (
 // shells maps a display name to a flake ref (e.g. "gapi" -> "../gapi").
 // The check shells out to `nix develop <ref>`, so it is slower than the
 // doctor and lives behind its own target.
+// missingTool is what the probe script prints when `command -v` finds
+// nothing. It is a sentinel rather than a store path, so two of them are
+// not evidence of agreement.
+const missingTool = "MISSING"
+
 // shellInventory pairs a shell's display name with the store paths it
 // resolved, in probe order.
 type shellInventory struct {
@@ -31,13 +36,31 @@ type shellInventory struct {
 }
 
 // compareInventories reports tools whose resolved store paths differ
-// between shells. It is pure so it can be tested; the nix probe that
-// feeds it is not.
-func compareInventories(inv []shellInventory, tools []string) []string {
-	var skew []string
-	ref := inv[0]
-	for _, other := range inv[1:] {
-		for _, tool := range tools {
+// between shells (skew) and tools some shell could not resolve at all
+// (unresolved). The two are separate because they want opposite
+// responses: skew means converge the pins, unresolved means the tool is
+// not in that flake.
+//
+// Before the split, an unresolved tool compared equal to another
+// unresolved tool, so a tool absent from EVERY shell read as unified and
+// the gate went green.
+//
+// It is pure so it can be tested; the nix probe that feeds it is not.
+func compareInventories(inv []shellInventory, tools []string) (skew, unresolved []string) {
+	for _, tool := range tools {
+		var absent []string
+		for _, sh := range inv {
+			if sh.paths[tool] == missingTool || sh.paths[tool] == "" {
+				absent = append(absent, sh.name)
+			}
+		}
+		if len(absent) > 0 {
+			unresolved = append(unresolved, fmt.Sprintf(
+				"%s: not resolvable in %s", tool, strings.Join(absent, ", ")))
+			continue
+		}
+		ref := inv[0]
+		for _, other := range inv[1:] {
 			a, b := ref.paths[tool], other.paths[tool]
 			if a != b {
 				skew = append(skew, fmt.Sprintf("%s: %s=%s vs %s=%s",
@@ -45,7 +68,7 @@ func compareInventories(inv []shellInventory, tools []string) []string {
 			}
 		}
 	}
-	return skew
+	return skew, unresolved
 }
 
 func CheckShellUnification(shells map[string]string, tools []string) error {
@@ -70,7 +93,10 @@ func CheckShellUnification(shells map[string]string, tools []string) error {
 		return fmt.Errorf("shell unification check needs at least two shells")
 	}
 
-	skew := compareInventories(inventories, tools)
+	skew, unresolved := compareInventories(inventories, tools)
+	if len(unresolved) > 0 {
+		return fmt.Errorf("dev shell tools not resolvable (add them to the flake, or drop them from the checked list):\n  %s", strings.Join(unresolved, "\n  "))
+	}
 	if len(skew) > 0 {
 		return fmt.Errorf("dev shell tool inventories diverge (converge the flakes and locks):\n  %s", strings.Join(skew, "\n  "))
 	}
