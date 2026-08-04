@@ -36,4 +36,12 @@ linters:
       # canonical "Code generated ... DO NOT EDIT." line, so golangci does
       # not auto-exempt it. This excludes LINT findings only - compile
       # (typecheck) failures in the package still surface via mage test.
+      #
+      # LOCAL RUNS ONLY (MAGELIB-DIV-009). This path is gitignored in gapi
+      # and absent from every CI checkout, and no lint job generates the
+      # bindings first, so in CI this entry matches nothing. It earns its
+      # keep only for a developer running mage lint after building the
+      # bindings locally. The consequence is the entry's subject: a local
+      # lint red and a local lint green are both claims about the local
+      # tree, not about the gate.
       - adk/python/gapi/native
