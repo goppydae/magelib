@@ -59,6 +59,55 @@ func checkFileLength() error {
 	return magelib.CheckFileLength(nil)
 }
 
+// licenseNotice is magelib's declaration for the header gate, and it is
+// deliberately the whole of it: a holder and a year.
+//
+// The Exhibit A prose and the SPDX line live in magelib and are not
+// spelled here, which is the lesson the terminology gate paid for.
+// Moving that gate into this library moved the LOGIC while each
+// consumer kept declaring the forbidden phrases in a Magefile that the
+// gate itself walks. Four repos each hand-copying a licence notice
+// would drift a word at a time, and the gate would certify each repo
+// against its own copy - so every repo could pass while spelling the
+// licence differently from the others.
+//
+// Year is 2026, magelib's year of FIRST PUBLICATION, and it does not
+// advance. Per-repo years are gapi 2025, goblin 2025, magelib 2026,
+// goppydae-docs 2026 (operator decision 16).
+var licenseNotice = magelib.LicenseConfig{
+	Holder: "Steven Verhelle (enqack)",
+	Year:   2026,
+}
+
+// LicenseCheck reports every hand-written file missing the MPL notice.
+//
+// NOT yet a dependency of Lint, and that is the sequencing the license
+// plan requires rather than an oversight: magelib carries zero notices
+// today, so wiring this into Lint before the sweep would turn every CI
+// run red - and CI minutes are the scarce resource the whole licence
+// effort exists to obtain, since public repos get them free. It joins
+// Lint's mg.Deps in the same change that lands the sweep, and until
+// then it is an operator-invoked target.
+func LicenseCheck() error {
+	return magelib.CheckLicenseHeaders(licenseNotice)
+}
+
+// LicenseAdd inserts the notice into every file LicenseCheck reports,
+// and prints each path it modified.
+//
+// Read that output; it is the diff you are about to review, and it is
+// also what the `git add` line must be built from. `git add -A` is
+// banned twice over in this silo - once because it sweeps up other
+// sessions' concurrent work, once because it drags in generated churn -
+// and a 400-file sweep is the exact situation that tempts it.
+//
+// Ungated on checkHermetic, like Fmt and Tidy: this is source hygiene
+// that shells out to nothing.
+func LicenseAdd() error {
+	_, err := magelib.AddLicenseHeaders(licenseNotice)
+	return err
+}
+
 // Build compiles the library (magelib ships no binaries).
 func Build() error {
 	mg.Deps(checkHermetic)
