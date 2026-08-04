@@ -23,12 +23,33 @@ import (
 // shells maps a display name to a flake ref (e.g. "gapi" -> "../gapi").
 // The check shells out to `nix develop <ref>`, so it is slower than the
 // doctor and lives behind its own target.
-func CheckShellUnification(shells map[string]string, tools []string) error {
-	type inventory struct {
-		name  string
-		paths map[string]string
+// shellInventory pairs a shell's display name with the store paths it
+// resolved, in probe order.
+type shellInventory struct {
+	name  string
+	paths map[string]string
+}
+
+// compareInventories reports tools whose resolved store paths differ
+// between shells. It is pure so it can be tested; the nix probe that
+// feeds it is not.
+func compareInventories(inv []shellInventory, tools []string) []string {
+	var skew []string
+	ref := inv[0]
+	for _, other := range inv[1:] {
+		for _, tool := range tools {
+			a, b := ref.paths[tool], other.paths[tool]
+			if a != b {
+				skew = append(skew, fmt.Sprintf("%s: %s=%s vs %s=%s",
+					tool, ref.name, a, other.name, b))
+			}
+		}
 	}
-	var inventories []inventory
+	return skew
+}
+
+func CheckShellUnification(shells map[string]string, tools []string) error {
+	var inventories []shellInventory
 
 	for name, ref := range shells {
 		script := "for t in " + strings.Join(tools, " ") + "; do printf '%s=' \"$t\"; readlink -f \"$(command -v \"$t\")\" || echo MISSING; done"
@@ -42,23 +63,14 @@ func CheckShellUnification(shells map[string]string, tools []string) error {
 				paths[k] = v
 			}
 		}
-		inventories = append(inventories, inventory{name: name, paths: paths})
+		inventories = append(inventories, shellInventory{name: name, paths: paths})
 	}
 
 	if len(inventories) < 2 {
 		return fmt.Errorf("shell unification check needs at least two shells")
 	}
 
-	var skew []string
-	ref := inventories[0]
-	for _, other := range inventories[1:] {
-		for _, tool := range tools {
-			a, b := ref.paths[tool], other.paths[tool]
-			if a != b {
-				skew = append(skew, fmt.Sprintf("%s: %s=%s vs %s=%s", tool, ref.name, a, other.name, b))
-			}
-		}
-	}
+	skew := compareInventories(inventories, tools)
 	if len(skew) > 0 {
 		return fmt.Errorf("dev shell tool inventories diverge (converge the flakes and locks):\n  %s", strings.Join(skew, "\n  "))
 	}
