@@ -2,8 +2,6 @@ package magelib
 
 import (
 	"bytes"
-	"fmt"
-	"os"
 	"regexp"
 )
 
@@ -28,37 +26,21 @@ import (
 // is the standing proof that the two are not the same set.
 var generatedMarker = regexp.MustCompile(`^// Code generated .* DO NOT EDIT\.$`)
 
-// IsGenerated reports whether the file at path carries the standard
-// generated marker. A file that cannot be read is an ERROR, never a
-// false: a caller that treats "unreadable" as "hand-written" would
-// process a file it could not see, and one that treats it as
-// "generated" would silently exempt it. Neither is a decision this
-// function is entitled to make for the caller.
+// There is deliberately NO exported path-taking IsGenerated here.
 //
-// STATE OF WIRING, stated because a doc comment naming a caller that
-// does not exist is this ecosystem's most common defect: the two gates
-// that exempt generated code today - CheckFileLength and
-// CheckLicenseHeaders - consume the unexported isGenerated directly,
-// because they have already read the file and a second read would be
-// waste. NOTHING CALLS THIS EXPORTED FORM YET. It exists because
-// MAGELIB-DIV-007 must classify files it has not read, and that entry
-// is open pending an operator decision between its two directions. If
-// -007 closes by some other route, this function has no caller and
-// should be deleted rather than left as surface.
+// One existed briefly, written for MAGELIB-DIV-007 on the assumption
+// that entry would need to classify files it had not yet read. It
+// resolved the other way (operator decision 22): making Fmt and the
+// Lint check agree on gofmt leaves generated output alone BY
+// CONSTRUCTION, so no formatting code needs a predicate at all. An
+// exported symbol with no caller is this ecosystem's most common
+// defect, so it was removed rather than kept as surface.
 //
-// What is genuinely shared today is the DEFINITION, not this wrapper:
-// one marker and one scanner, so two gates cannot drift apart on what
-// "generated" means - the failure MAGELIB-DIV-003 recorded when a
-// check and its enforcing twin read two declarations.
-func IsGenerated(path string) (bool, error) {
-	// #nosec G304 -- the caller names a path inside the repo it was
-	// invoked in; this function reads, classifies and never writes.
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false, fmt.Errorf("generated check: read %s: %w", path, err)
-	}
-	return isGenerated(data), nil
-}
+// What is shared is the DEFINITION below - one marker and one scanner,
+// consumed by CheckFileLength and CheckLicenseHeaders, which have both
+// already read the file. Two gates, one definition, so they cannot
+// drift on what "generated" means: the failure MAGELIB-DIV-003
+// recorded when a check and its enforcing twin read two declarations.
 
 // isGenerated reports whether the file carries the standard generated
 // marker above its first line of code. The marker is only looked for in
