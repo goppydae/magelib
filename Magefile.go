@@ -1,3 +1,11 @@
+// Copyright (c) 2026 Steven Verhelle (enqack)
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// SPDX-License-Identifier: MPL-2.0
+
 //go:build mage
 // +build mage
 
@@ -81,13 +89,17 @@ var licenseNotice = magelib.LicenseConfig{
 
 // LicenseCheck reports every hand-written file missing the MPL notice.
 //
-// NOT yet a dependency of Lint, and that is the sequencing the license
-// plan requires rather than an oversight: magelib carries zero notices
-// today, so wiring this into Lint before the sweep would turn every CI
-// run red - and CI minutes are the scarce resource the whole licence
-// effort exists to obtain, since public repos get them free. It joins
-// Lint's mg.Deps in the same change that lands the sweep, and until
-// then it is an operator-invoked target.
+// A dependency of Lint as of the sweep that headered this repo's 29
+// files, which is the sequencing the license plan requires: wiring it
+// BEFORE the sweep would have turned every CI run red, and CI minutes
+// are the scarce resource the whole licence effort exists to obtain.
+// Sweep and gate land together so the gate is never a mechanism with
+// no caller - this ecosystem's most common defect.
+//
+// Local to magelib. Each repo has its own Lint target with its own
+// mg.Deps; magelib.Lint is only the golangci-lint and gosec runner and
+// carries no licence check, so this cannot turn gapi or goblin red.
+// Those two are wired by their own sweeps.
 func LicenseCheck() error {
 	return magelib.CheckLicenseHeaders(licenseNotice)
 }
@@ -127,7 +139,7 @@ func Test() error {
 	return sh.RunV("go", "test", "-race", "-v", "./...")
 }
 
-// Fmt formats all Go code with goimports.
+// Fmt formats all Go code with gofmt.
 func Fmt() error {
 	return magelib.Fmt()
 }
@@ -146,7 +158,7 @@ func Tidy() error {
 // via variable) flag that purpose itself, so they are excluded for this repo
 // only. Consumer repos call magelib.Lint() with no excludes and stay strict.
 func Lint() error {
-	mg.Deps(checkHermetic, checkFileLength)
+	mg.Deps(checkHermetic, checkFileLength, LicenseCheck)
 	return magelib.Lint("G204", "G304")
 }
 
