@@ -78,3 +78,99 @@ jobs:
       # consumer repos do not get. See the comment on Lint in Magefile.go.
       - name: Lint Gate
         run: nix develop -c mage -v lint
+
+  # MAGELIB-DIV-008. magelib ships three files that cross the repo
+  # boundary UNTAGGED and UNVENDORED, and until this job nothing on this
+  # side gated them:
+  #
+  #   .golangci.yml   pkg/magelib/lint.go:24 searches "." then
+  #                   "../magelib/", so both consumers lint against
+  #                   whatever this repo's main holds
+  #   flake.nix       the devShell mage envcheck compares across all
+  #                   three shells
+  #   the pins        mage doctor validates against the shell
+  #
+  # Both consumers check magelib out with NO ref - main - on every one of
+  # their own CI runs. So a change here could only be discovered by them,
+  # after merge, attributed to whatever they happened to be changing.
+  #
+  # This is deliberately NOT a repository_dispatch to the consumers. A
+  # dispatch fires after merge and reports damage already done; this runs
+  # on the pull request, before. It also exercises the actual change,
+  # which a dispatch to a repo that vendors magelib by TAG cannot - see
+  # GAPI-DIV-073 for what that failure mode costs when nobody notices.
+  consumer-gates:
+    name: Consumer Gates
+    runs-on: ubuntu-latest
+    env:
+      # The consumers' own resolution: vendored magelib CODE paired with
+      # THIS pull request's CONFIG. That pairing is the live-read surface
+      # this job exists for. Building consumer Go against magelib HEAD
+      # would assert a resolution no consumer uses and no release makes,
+      # and each consumer already proves the vendored path itself.
+      GOWORK: "off"
+    steps:
+      - name: Checkout Workspace (Magelib, this pull request)
+        uses: actions/checkout@v4
+        with:
+          path: magelib
+
+      # No token on either sibling. All three repos are public, so a
+      # cross-repo checkout needs no credential - gapi and goblin still
+      # pass GOPPYDAE_READ_TOKEN in their own sibling jobs, which is
+      # vestigial rather than required, and that secret does not exist
+      # here.
+      - name: Checkout Workspace (Gapi)
+        uses: actions/checkout@v4
+        with:
+          repository: goppydae/gapi
+          path: gapi
+
+      - name: Checkout Workspace (Goblin)
+        uses: actions/checkout@v4
+        with:
+          repository: goppydae/goblin
+          path: goblin
+
+      - name: Synchronize Environment (Nix)
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Report What Is Under Test
+        run: |
+          echo "magelib $(git -C magelib rev-parse --short HEAD)  (this pull request)"
+          echo "gapi    $(git -C gapi rev-parse --short HEAD)"
+          echo "goblin  $(git -C goblin rev-parse --short HEAD)"
+
+      # Both consumers, because the shared config meets two different
+      # rule surfaces and a change can be fine for one and not the other.
+      - name: Lint Gate (Gapi, against this config)
+        working-directory: gapi
+        run: nix develop -c mage -v lint
+
+      - name: Lint Gate (Goblin, against this config)
+        working-directory: goblin
+        run: nix develop -c mage -v lint
+
+      # envcheck compares all three shells, so one vantage covers the
+      # set; running it from each consumer would repeat the same
+      # comparison rather than widen it. doctor is per-shell and is
+      # already run against magelib's own in ecosystem-gates, so this is
+      # a consumer's view of the same pins.
+      - name: Detect Tool Skew Across Sibling Shells
+        working-directory: gapi
+        run: nix develop -c mage -v envcheck
+
+      - name: Validate Consumer Dev Shell Against These Pins
+        working-directory: gapi
+        run: nix develop -c mage -v doctor
+
+      - name: Name What This Failure Means
+        if: failure()
+        run: |
+          echo "::error::A consumer's gate rejects this pull request's shared configuration."
+          echo "::error::magelib's own build and tests may be perfectly green - this is the"
+          echo "::error::live-read surface (.golangci.yml, flake.nix devShell, the pins),"
+          echo "::error::which gapi and goblin read from THIS repo's main with no tag and no"
+          echo "::error::vendoring. Merging would redden both consumers on their next run."
