@@ -189,6 +189,55 @@ func TestGoppydaeTerminologyRulesAreUsable(t *testing.T) {
 	}
 }
 
+// TestGoppydaeTerminologyRulesCatchTheRetiredKitNameInBothForms is the
+// regression for the gap that a single word-boundary rule leaves.
+//
+// GAPI-DIV-067 asked for one rule. Against the real tree that rule
+// caught the quoted singular in gapi's docs/lore.md and MISSED the
+// plural on the line above, because a trailing s is a word character
+// and the boundary fails there. Prose reaches for the plural at least
+// as often as the singular, so a gate that only catches one of them
+// lets the retired term back in through the commoner door.
+//
+// Both forms are asserted here rather than only the plural: a later
+// tidy-up that "deduplicates" the two rules must fail this test rather
+// than quietly restore the gap.
+func TestGoppydaeTerminologyRulesCatchTheRetiredKitNameInBothForms(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		text string
+	}{
+		{"singular", "The kit was called a DDK back then.\n"},
+		{"plural", "Both DDKs predate the rename.\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			writeTree(t, map[string]string{"history.md": tc.text})
+			err := CheckTerminology(GoppydaeTerminologyRules)
+			if err == nil {
+				t.Fatalf("the retired kit name passed the gate in its %s form: %q",
+					tc.name, tc.text)
+			}
+			if !strings.Contains(err.Error(), "history.md") {
+				t.Fatalf("did not flag history.md: %v", err)
+			}
+		})
+	}
+}
+
+// The canonical spelling must not trip the new rules. ADK shares two of
+// three letters with the term being retired, so a rule written loosely
+// enough to catch the plural could easily catch the replacement too -
+// which would make the gate unusable in exactly the documents that
+// explain the rename.
+func TestGoppydaeTerminologyRulesLeaveTheCanonicalKitNameAlone(t *testing.T) {
+	writeTree(t, map[string]string{
+		"ok.md": "The Go ADK and the Python ADK ship inside the kernel. ADKs are agents.\n",
+	})
+	if err := CheckTerminology(GoppydaeTerminologyRules); err != nil {
+		t.Fatalf("the canonical kit name was flagged: %v", err)
+	}
+}
+
 // TestCheckTerminologyRejectsAnUnmatchableWordBoundaryRule: a rule that
 // compiles clean and can never fire is silent, and silence from a gate
 // is indistinguishable from a clean tree.
