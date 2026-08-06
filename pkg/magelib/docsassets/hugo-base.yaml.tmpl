@@ -4,7 +4,10 @@
 # second, so anything a repo needs to override it simply restates.
 
 baseURL: {{ .BaseURL }}
-languageCode: en-us
+# `locale`, not `languageCode`: the latter is deprecated as of Hugo
+# v0.158.0 and warns on every build. Carried over from the reference
+# implementation, which still spells it the old way.
+locale: en-us
 title: {{ .Title }}
 
 taxonomies:

@@ -42,3 +42,13 @@ tmp/
 id_rsa
 id_ecdsa
 id_ed25519
+
+# --- Documentation Site Output ---
+# The rendered site and the materialised magelib asset tree are both
+# generated. The GENERATED REFERENCE under docs/content/reference is NOT
+# ignored: it is committed and drift-gated, so it reads on the forge
+# without a build and gives the design docs a mechanical counterpart.
+docs/public/
+docs/.magelib/
+docs/resources/
+.hugo_build.lock
