@@ -49,6 +49,13 @@
             golangci-lint
             gosec
             govulncheck
+
+            # Documentation toolchain. These are here, in the library that
+            # invokes them, so the tool and the code that calls it enter
+            # the flakes together - and so CheckShellUnification has a
+            # third shell to compare gapi and goblin against.
+            hugo
+            gomarkdoc
           ];
 
           shellHook = ''
