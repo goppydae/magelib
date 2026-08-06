@@ -139,6 +139,32 @@ func Test() error {
 	return sh.RunV("go", "test", "-race", "-v", "./...")
 }
 
+// CI reproduces ci.yml's jobs locally, in CI's order.
+//
+// magelib has no All target to be confused with, but the same rule
+// holds: nothing here REPAIRS the tree. Fmt and Tidy stay separate,
+// because a target that fixes what CI checks cannot fail the way CI
+// fails.
+func CI() error {
+	return magelib.RunCI(magelib.CIConfig{
+		Steps: []magelib.Step{
+			magelib.Target("doctor", Doctor),
+			magelib.Target("lint", Lint),
+			magelib.Target("build", Build),
+			magelib.Target("test", Test),
+			{Name: "docs:build", Run: Docs{}.Build},
+			{Name: "nix flake check --all-systems", Run: magelib.NixFlakeCheckAllSystems},
+		},
+		Excluded: []string{
+			"Consumer Gates - CI runs gapi's and goblin's lint, envcheck and " +
+				"doctor against THIS magelib, which is the live-read surface " +
+				"(.golangci.yml, the devShell, the pins). Reproduce with " +
+				"`mage lint` in each sibling; go.work already points them here",
+			"release-guard checkVersion - fires on a tag push, not a pull request",
+		},
+	})
+}
+
 // Fmt formats all Go code with gofmt.
 func Fmt() error {
 	return magelib.Fmt()

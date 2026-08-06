@@ -14,6 +14,7 @@ import "github.com/goppydae/magelib/pkg/magelib"
 
 - [Variables](<#variables>)
 - [func AddLicenseHeaders\(cfg LicenseConfig, skips ...Skip\) \(\[\]string, error\)](<#AddLicenseHeaders>)
+- [func AssertClean\(paths ...string\) error](<#AssertClean>)
 - [func BufGenerate\(against string\) error](<#BufGenerate>)
 - [func CheckDocsDefaults\(cfg DocsConfig, waivers \[\]string, skips ...Skip\) error](<#CheckDocsDefaults>)
 - [func CheckDocsDrift\(cfg DocsConfig\) error](<#CheckDocsDrift>)
@@ -33,12 +34,18 @@ import "github.com/goppydae/magelib/pkg/magelib"
 - [func FuzzAll\(fuzztime string\) error](<#FuzzAll>)
 - [func Lint\(gosecExcludes ...string\) error](<#Lint>)
 - [func LoadDefaults\(path string\) \(map\[string\]DefaultEntry, error\)](<#LoadDefaults>)
+- [func NixBuild\(installable string\) error](<#NixBuild>)
+- [func NixFlakeCheckAllSystems\(\) error](<#NixFlakeCheckAllSystems>)
+- [func ProtoBaseline\(\) string](<#ProtoBaseline>)
 - [func Release\(name, distDir, ldflags string, binaries map\[string\]string\) error](<#Release>)
+- [func RunCI\(cfg CIConfig\) error](<#RunCI>)
 - [func SharedLintConfig\(\) \(string, error\)](<#SharedLintConfig>)
 - [func Tidy\(\) error](<#Tidy>)
 - [func Version\(\) string](<#Version>)
 - [func Vuln\(\) error](<#Vuln>)
+- [func WithProtoBaseline\(baseline string, fn func\(\) error\) error](<#WithProtoBaseline>)
 - [type APIPackage](<#APIPackage>)
+- [type CIConfig](<#CIConfig>)
 - [type DefaultEntry](<#DefaultEntry>)
 - [type DocsConfig](<#DocsConfig>)
 - [type DocsDefaultsError](<#DocsDefaultsError>)
@@ -50,6 +57,9 @@ import "github.com/goppydae/magelib/pkg/magelib"
   - [func \(c LicenseConfig\) Notice\(ext string\) \(string, error\)](<#LicenseConfig.Notice>)
 - [type ModulePins](<#ModulePins>)
 - [type Skip](<#Skip>)
+- [type Step](<#Step>)
+  - [func Cmd\(name, command string, args ...string\) Step](<#Cmd>)
+  - [func Target\(name string, fn func\(\) error\) Step](<#Target>)
 - [type TerminologyRule](<#TerminologyRule>)
 - [type Transcription](<#Transcription>)
 - [type VersionMismatchError](<#VersionMismatchError>)
@@ -104,6 +114,19 @@ The return value is not a convenience. This sweep touches \~400 files across a s
 Printing as well as returning is for the operator watching it run: the list is the diff they are about to review.
 
 Idempotent. A file that already carries the notice is left BYTE IDENTICAL and is not reported as modified, so a second run reports nothing and stages nothing.
+
+<a name="AssertClean"></a>
+## func [AssertClean](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ci.go#L187>)
+
+```go
+func AssertClean(paths ...string) error
+```
+
+AssertClean fails when any named path has uncommitted changes.
+
+This is the second half of CI's codegen gate: regenerating proves the generator runs, and only the diff proves the COMMITTED output is what the pinned plugins produce. Regeneration alone is a green that means nothing.
+
+Scoped to paths rather than CI's bare \`git diff \-\-exit\-code\`, and the difference is deliberate: CI runs on a fresh checkout where any diff is generated output, while a developer legitimately has unrelated edits in flight. Scoping keeps the gate honest without failing on work in progress.
 
 <a name="BufGenerate"></a>
 ## func [BufGenerate](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/proto.go#L39>)
@@ -350,6 +373,41 @@ func LoadDefaults(path string) (map[string]DefaultEntry, error)
 
 LoadDefaults reads a repo's generated defaults.json.
 
+<a name="NixBuild"></a>
+## func [NixBuild](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ci.go#L117>)
+
+```go
+func NixBuild(installable string) error
+```
+
+NixBuild runs the Flake Build job's build step.
+
+The installable is spelled as CI spells it. \`.\#\` RESOLVES ONLY GIT\-TRACKED FILES, which is correct in CI, where the working tree is the commit, and is the reason RunCI warns on a dirty tree rather than silently substituting \`path:.\` \- a local run that quietly tested something else would be worse than one that names the difference.
+
+<a name="NixFlakeCheckAllSystems"></a>
+## func [NixFlakeCheckAllSystems](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ci.go#L128>)
+
+```go
+func NixFlakeCheckAllSystems() error
+```
+
+NixFlakeCheckAllSystems runs the evaluation gate CI runs.
+
+\`nix build\` and \`nix flake check\` COVER DISJOINT FAILURE MODES and both are required. A required argument added to a package expression is an EVALUATION failure of every caller \- a NixOS module among them \- which no amount of building reaches. That defect merged once, past four green local builds.
+
+<a name="ProtoBaseline"></a>
+## func [ProtoBaseline](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ci.go#L145>)
+
+```go
+func ProtoBaseline() string
+```
+
+ProtoBaseline names a commit the working tree does not equal, so the schema's breaking check can actually fail.
+
+THIS IS THE SUBTLE ONE. A Proto target's own default is usually ".git\#ref=HEAD", which is right for a developer comparing edits against the last commit and INERT anywhere the tree already IS that commit \- the schema gets compared against itself and can never report a break. CI supersedes it with the pull request's merge base. A local \`mage proto\` alone therefore proves nothing about compatibility, and this function is what makes the local run mean the same thing.
+
+Resolution order: the merge base against origin/main, unless that is HEAD itself \(already merged, or on main\), in which case HEAD\~1.
+
 <a name="Release"></a>
 ## func [Release](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/release.go#L40>)
 
@@ -360,6 +418,15 @@ func Release(name, distDir, ldflags string, binaries map[string]string) error
 Release cross\-compiles the given commands pure\-Go \(CGO\_ENABLED=0\) for linux/\{amd64,arm64\} and darwin/\{amd64,arm64\}, archives each platform as a .tar.gz under distDir, and writes a SHA256SUMS manifest beside them.
 
 The minisign signing of SHA256SUMS and the signed release tag \(git tag \-s\) are operator\-gated and intentionally NOT performed here; the stub prints the exact command the operator runs.
+
+<a name="RunCI"></a>
+## func [RunCI](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ci.go#L66>)
+
+```go
+func RunCI(cfg CIConfig) error
+```
+
+RunCI executes the steps in order, stopping at the first failure.
 
 <a name="SharedLintConfig"></a>
 ## func [SharedLintConfig](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/lint.go#L23>)
@@ -397,6 +464,15 @@ func Vuln() error
 
 Vuln runs govulncheck, the call\-graph\-filtered CVE gate. It is a named exception to hermeticity \(it fetches the vulnerability DB over the network\): when offline it is skipped loudly, never silently.
 
+<a name="WithProtoBaseline"></a>
+## func [WithProtoBaseline](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ci.go#L159>)
+
+```go
+func WithProtoBaseline(baseline string, fn func() error) error
+```
+
+WithProtoBaseline runs fn with PROTO\_BREAKING\_AGAINST set, restoring the previous value afterwards.
+
 <a name="APIPackage"></a>
 ## type [APIPackage](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L70-L82>)
 
@@ -415,6 +491,25 @@ type APIPackage struct {
     // template file: the drift gate compares bytes, and a second place
     // that decides those bytes is a second place for them to move.
     Title string
+}
+```
+
+<a name="CIConfig"></a>
+## type [CIConfig](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ci.go#L53-L63>)
+
+CIConfig declares how one repository reproduces its own pull\-request workflow.
+
+```go
+type CIConfig struct {
+    // Steps run in order and fail fast. Order is part of the contract:
+    // build precedes the race suite, and any binding generation precedes
+    // the suites that load it.
+    Steps []Step
+
+    // Excluded names the CI jobs this reproduction does NOT run, one
+    // short reason each. Printed on success. Empty means the local run
+    // claims to be complete, which is a strong claim.
+    Excluded []string
 }
 ```
 
@@ -656,6 +751,40 @@ type Skip struct {
     Reason string
 }
 ```
+
+<a name="Step"></a>
+## type [Step](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ci.go#L46-L49>)
+
+Step is one named unit of a CI reproduction.
+
+The name is what a failure reports. A bare exit code from the eleventh command in a sequence is a puzzle rather than a diagnosis.
+
+```go
+type Step struct {
+    Name string
+    Run  func() error
+}
+```
+
+<a name="Cmd"></a>
+### func [Cmd](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ci.go#L98>)
+
+```go
+func Cmd(name, command string, args ...string) Step
+```
+
+Cmd builds a Step that runs one command with its output attached.
+
+<a name="Target"></a>
+### func [Target](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ci.go#L106>)
+
+```go
+func Target(name string, fn func() error) Step
+```
+
+Target builds a Step from an existing mage target.
+
+Takes the function rather than invoking mage recursively so a failure surfaces as that target's own error rather than a subprocess exit code.
 
 <a name="TerminologyRule"></a>
 ## type [TerminologyRule](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/terminology.go#L25-L37>)
