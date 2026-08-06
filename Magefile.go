@@ -184,8 +184,16 @@ func Tidy() error {
 // via variable) flag that purpose itself, so they are excluded for this repo
 // only. Consumer repos call magelib.Lint() with no excludes and stay strict.
 func Lint() error {
-	mg.Deps(checkHermetic, checkFileLength, LicenseCheck, Docs.Check)
+	mg.Deps(checkHermetic, checkFileLength, LicenseCheck, Docs.Check, checkLedger)
 	return magelib.Lint("G204", "G304")
+}
+
+// checkLedger gates this repo's ledgers' structure.
+func checkLedger() error {
+	if err := magelib.CheckDivergence("divergence.jsonl"); err != nil {
+		return err
+	}
+	return magelib.CheckDeprecation("deprecation.jsonl")
 }
 
 // Doctor validates the dev shell against the ecosystem pins.

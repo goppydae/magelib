@@ -11,6 +11,7 @@ package magelib
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -188,14 +189,72 @@ func pinInventories(p ModulePins) ([]inventory, error) {
 
 // shellInventories resolves every tool's real store path inside every
 // dev shell.
+// gobinEntries lists the file names in the caller's GOBIN.
+//
+// The shared idiom across these repos is GOBIN=$PWD/.bin with GOBIN
+// leading PATH, and $PWD belongs to WHOEVER ENTERED THE SHELL, because
+// `nix develop` does not change directory. So a hook that installs a
+// tool installs it into the caller's tree.
+func gobinEntries() map[string]bool {
+	dir := os.Getenv("GOBIN")
+	if dir == "" {
+		dir = ".bin"
+	}
+	names := map[string]bool{}
+	items, err := os.ReadDir(dir)
+	if err != nil {
+		return names // absent is the common case and is not a finding
+	}
+	for _, it := range items {
+		names[it.Name()] = true
+	}
+	return names
+}
+
+// A shell must not ADD to the caller's GOBIN.
+//
+// GOBLIN-DIV-077: goblin's hook built gopy into $GOBIN whenever it was
+// missing. Entering that shell from gapi's checkout therefore wrote a
+// gopy into GAPI's .bin, where it led PATH and shadowed the packaged
+// one, and gapi's hermeticity gate failed on a binary gapi never asked
+// for. Three correct-looking facts composed into it, which is why no
+// single review caught it.
+//
+// Additions fail; REMOVALS are reported and tolerated. That asymmetry is
+// deliberate and transitional: gapi's and goblin's hooks now delete a
+// stale $GOBIN/gopy on entry, which can only remove an artifact that
+// should never have existed. The durable fix is a hook that touches no
+// path derived from $PWD at all, at which point the removals go too and
+// this can tighten to "no change".
+func gobinAdditions(before, after map[string]bool) []string {
+	var added []string
+	for name := range after {
+		if !before[name] {
+			added = append(added, name)
+		}
+	}
+	sort.Strings(added)
+	return added
+}
+
 func shellInventories(shells map[string]string, tools []string) ([]inventory, error) {
 	var inv []inventory
 	for _, name := range sortedNames(shells) {
 		ref := shells[name]
 		script := "for t in " + strings.Join(tools, " ") + "; do printf '%s=' \"$t\"; readlink -f \"$(command -v \"$t\")\" || echo MISSING; done"
+		beforeBin := gobinEntries()
 		out, err := exec.Command("nix", "develop", ref, "--command", "sh", "-c", script).Output()
 		if err != nil {
 			return nil, fmt.Errorf("entering dev shell %s (%s): %w", name, ref, err)
+		}
+		if added := gobinAdditions(beforeBin, gobinEntries()); len(added) > 0 {
+			return nil, fmt.Errorf(
+				"dev shell %s (%s) wrote into THIS repo's GOBIN: %s\n"+
+					"  A shell hook must not install into $PWD/.bin: nix does not change\n"+
+					"  directory, so $PWD is the caller's checkout and GOBIN leads PATH -\n"+
+					"  the installed tool shadows the packaged one in a repo that never\n"+
+					"  asked for it. Take the tool from the flake instead (GOBLIN-DIV-077)",
+				name, ref, strings.Join(added, ", "))
 		}
 		values := map[string]string{}
 		for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {

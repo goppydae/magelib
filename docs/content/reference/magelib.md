@@ -16,6 +16,8 @@ import "github.com/goppydae/magelib/pkg/magelib"
 - [func AddLicenseHeaders\(cfg LicenseConfig, skips ...Skip\) \(\[\]string, error\)](<#AddLicenseHeaders>)
 - [func AssertClean\(paths ...string\) error](<#AssertClean>)
 - [func BufGenerate\(against string\) error](<#BufGenerate>)
+- [func CheckDeprecation\(path string\) error](<#CheckDeprecation>)
+- [func CheckDivergence\(path string\) error](<#CheckDivergence>)
 - [func CheckDocsDefaults\(cfg DocsConfig, waivers \[\]string, skips ...Skip\) error](<#CheckDocsDefaults>)
 - [func CheckDocsDrift\(cfg DocsConfig\) error](<#CheckDocsDrift>)
 - [func CheckFileLength\(waivers \[\]string, skips ...Skip\) error](<#CheckFileLength>)
@@ -141,6 +143,24 @@ PROTO\_BREAKING\_SKIP=1 skips the breaking step, loudly. Its one legitimate use 
 
 PROTO\_BREAKING\_AGAINST overrides the caller's baseline. The callers pass ".git\#ref=HEAD", which is right for a developer comparing an edited working tree against the last commit, and useless anywhere the working tree IS the commit: a fresh CI checkout compares the schema against itself and cannot fail. CI must therefore name a baseline it does not already equal \(the pull request's merge base, or HEAD\~1 on a push\). The chosen baseline is echoed before the run so a build log records what the gate actually compared.
 
+<a name="CheckDeprecation"></a>
+## func [CheckDeprecation](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ledger.go#L186>)
+
+```go
+func CheckDeprecation(path string) error
+```
+
+CheckDeprecation validates a deprecation ledger's structure.
+
+<a name="CheckDivergence"></a>
+## func [CheckDivergence](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ledger.go#L183>)
+
+```go
+func CheckDivergence(path string) error
+```
+
+CheckDivergence validates a divergence ledger's structure.
+
 <a name="CheckDocsDefaults"></a>
 ## func [CheckDocsDefaults](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docsdefaults.go#L121>)
 
@@ -231,7 +251,7 @@ Every violation is reported, not just the first: a gate that stops at the first 
 Unreadable files are an ERROR, not a skip: a gate that cannot read a file must not report it clean.
 
 <a name="CheckShellUnification"></a>
-## func [CheckShellUnification](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/env.go#L219>)
+## func [CheckShellUnification](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/env.go#L278>)
 
 ```go
 func CheckShellUnification(shells map[string]string, tools []string, pins ...ModulePins) error
@@ -687,7 +707,7 @@ Notice renders the configured notice as a comment block in the style of the name
 An unknown extension is an ERROR, not an empty string. A caller that received "" would write a file with no notice and no complaint.
 
 <a name="ModulePins"></a>
-## type [ModulePins](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/env.go#L115-L127>)
+## type [ModulePins](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/env.go#L116-L128>)
 
 ModulePins declares a versioned pin that lives in a FILE rather than in a dev shell, and that must agree across a set of repositories.
 
