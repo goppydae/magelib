@@ -1,0 +1,71 @@
+name: Documentation
+
+# Goal 5 of the documentation programme: every site is actually
+# reachable. Until this workflow existed magelib rendered to nobody -
+# there was no site config at all, and in the two code repos the output
+# was gitignored with no workflow building it, which is the same outcome
+# reached by a different route.
+#
+# The build job runs on pull requests too, and deliberately: a site that
+# only builds on main tells you it is broken after the merge. Deploy is
+# gated to main and tags, so a pull request proves the render without
+# publishing it.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Pages allows one concurrent deployment. cancel-in-progress is false
+# rather than true: cancelling a half-finished deployment leaves the
+# published site in whatever state it reached, which is worse than
+# queueing behind it.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Render the Site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Synchronize Environment (Nix)
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      # docs:build syncs the shared assets, regenerates the API
+      # reference, and renders. It does NOT gate the result: the drift
+      # check is part of `mage lint` in the CI workflow, because a stale
+      # reference is a lint failure on the pull request rather than a
+      # deploy failure after merge.
+      - name: Build Documentation
+        run: nix develop -c mage -v docs:build
+
+      - name: Upload Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/public
+
+  deploy:
+    name: Publish to Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

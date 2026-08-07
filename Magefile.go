@@ -26,7 +26,7 @@ import (
 var toolchain = magelib.DoctorConfig{
 	ProtoPlugins: []string{"buf", "protoc-gen-go", "protoc-gen-go-grpc"},
 	RequiredEnv:  []string{"GOBIN"},
-	SharedTools:  []string{"buf", "golangci-lint", "gosec", "govulncheck", "mage", "goimports"},
+	SharedTools:  []string{"buf", "golangci-lint", "gosec", "govulncheck", "mage", "goimports", "hugo", "gomarkdoc"},
 }
 
 // checkHermetic ensures tools are running from Nix store.
@@ -139,6 +139,32 @@ func Test() error {
 	return sh.RunV("go", "test", "-race", "-v", "./...")
 }
 
+// CI reproduces ci.yml's jobs locally, in CI's order.
+//
+// magelib has no All target to be confused with, but the same rule
+// holds: nothing here REPAIRS the tree. Fmt and Tidy stay separate,
+// because a target that fixes what CI checks cannot fail the way CI
+// fails.
+func CI() error {
+	return magelib.RunCI(magelib.CIConfig{
+		Steps: []magelib.Step{
+			magelib.Target("doctor", Doctor),
+			magelib.Target("lint", Lint),
+			magelib.Target("build", Build),
+			magelib.Target("test", Test),
+			{Name: "docs:build", Run: Docs{}.Build},
+			{Name: "nix flake check --all-systems", Run: magelib.NixFlakeCheckAllSystems},
+		},
+		Excluded: []string{
+			"Consumer Gates - CI runs gapi's and goblin's lint, envcheck and " +
+				"doctor against THIS magelib, which is the live-read surface " +
+				"(.golangci.yml, the devShell, the pins). Reproduce with " +
+				"`mage lint` in each sibling; go.work already points them here",
+			"release-guard checkVersion - fires on a tag push, not a pull request",
+		},
+	})
+}
+
 // Fmt formats all Go code with gofmt.
 func Fmt() error {
 	return magelib.Fmt()
@@ -158,13 +184,82 @@ func Tidy() error {
 // via variable) flag that purpose itself, so they are excluded for this repo
 // only. Consumer repos call magelib.Lint() with no excludes and stay strict.
 func Lint() error {
-	mg.Deps(checkHermetic, checkFileLength, LicenseCheck)
+	mg.Deps(checkHermetic, checkFileLength, LicenseCheck, Docs.Check, checkLedger)
 	return magelib.Lint("G204", "G304")
+}
+
+// checkLedger gates this repo's ledgers' structure.
+func checkLedger() error {
+	if err := magelib.CheckDivergence("divergence.jsonl"); err != nil {
+		return err
+	}
+	return magelib.CheckDeprecation("deprecation.jsonl")
 }
 
 // Doctor validates the dev shell against the ecosystem pins.
 func Doctor() error {
 	return magelib.Doctor(toolchain)
+}
+
+// docsConfig is this repo's documentation site.
+//
+// magelib publishes a generated API reference and a landing page, and no
+// prose: the design reasoning lives in the ecosystem documentation as
+// design/build-environment.md, and a second copy beside the code is a
+// second thing to keep in step. There are no Generators here because
+// magelib ships no binary and so has no command tree to walk.
+var docsConfig = magelib.DocsConfig{
+	Dir:     "docs",
+	Title:   "magelib",
+	BaseURL: "https://goppydae.github.io/magelib/",
+	Repo:    "github.com/goppydae/magelib",
+	APIPackages: []magelib.APIPackage{
+		{Path: "./pkg/magelib", Out: "docs/content/reference/magelib.md", Title: "magelib"},
+	},
+	Committed: []string{"docs/content/reference/magelib.md"},
+}
+
+// Docs groups the documentation targets.
+//
+// A namespace rather than the flat Docs()/DocsServe() pair the reference
+// implementation uses: there are five of these and two are gates, so
+// `mage docs:check` reads as a check while `mage docsCheck` reads as
+// another way to build.
+type Docs mg.Namespace
+
+// Sync materialises the shared Hugo assets into docs/.magelib.
+func (Docs) Sync() error {
+	mg.Deps(checkHermetic)
+	return magelib.DocsSync(docsConfig)
+}
+
+// Generate renders the API reference from source.
+func (Docs) Generate() error {
+	mg.Deps(checkHermetic)
+	return magelib.DocsGenerate(docsConfig)
+}
+
+// Build renders the static site into docs/public.
+func (Docs) Build() error {
+	mg.Deps(checkHermetic)
+	return magelib.DocsBuild(docsConfig)
+}
+
+// Serve runs Hugo's own server with live reload.
+func (Docs) Serve() error {
+	mg.Deps(checkHermetic)
+	return magelib.DocsServe(docsConfig)
+}
+
+// Check fails when the committed reference no longer matches the source.
+//
+// Wired into Lint rather than left to a separate invocation, because a
+// gate nobody runs is the state the whole documentation programme exists
+// to end: docs/cli-reference.md in goblin was 312 hand-written lines
+// nothing compared to anything.
+func (Docs) Check() error {
+	mg.Deps(checkHermetic)
+	return magelib.CheckDocsDrift(docsConfig)
 }
 
 // CheckVersion gates the VERSION file against the tag being cut.
