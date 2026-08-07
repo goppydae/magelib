@@ -300,7 +300,7 @@ func docsGenerateInto(cfg DocsConfig, root string) error {
 		if err := os.MkdirAll(filepath.Dir(out), 0o750); err != nil {
 			return err
 		}
-		if err := runStreamed("gomarkdoc", pkg.Path, "--output", out); err != nil {
+		if err := runStreamed("gomarkdoc", gomarkdocArgs(cfg, pkg, out)...); err != nil {
 			return fmt.Errorf("gomarkdoc %s: %w", pkg.Path, err)
 		}
 		if err := prependFrontMatter(out, pkg.Title); err != nil {
@@ -314,6 +314,39 @@ func docsGenerateInto(cfg DocsConfig, root string) error {
 		}
 	}
 	return nil
+}
+
+// docsDefaultBranch is the branch every source link points at.
+//
+// A constant rather than a DocsConfig field because all four repositories
+// use main, and an optional field defaulting to "main" would be a second
+// place for the answer to live without ever holding a different one.
+const docsDefaultBranch = "main"
+
+// gomarkdocArgs builds the gomarkdoc invocation for one package.
+//
+// The three repository flags are the point. gomarkdoc DETECTS the
+// repository from git state and emits source links only when detection
+// succeeds, so the same source renders two ways: a developer checkout
+// produces linked headings, a CI checkout produces bare ones. Both are
+// legitimate output; a byte-comparing drift gate cannot tell them apart
+// from staleness, and reports whichever it did not generate as stale.
+//
+// Measured on magelib PR #33 - green locally, red in CI, and byte
+// identical once these are pinned. Detection makes generated output a
+// function of how the tree was obtained, which is the one thing an
+// artifact under a byte gate must not be.
+//
+// Repo is validated to carry no scheme, which is what lets the URL be
+// derived from it rather than configured beside it.
+func gomarkdocArgs(cfg DocsConfig, pkg APIPackage, out string) []string {
+	return []string{
+		pkg.Path,
+		"--output", out,
+		"--repository.url", "https://" + cfg.Repo,
+		"--repository.default-branch", docsDefaultBranch,
+		"--repository.path", "/",
+	}
 }
 
 // prependFrontMatter puts a relearn front matter block in front of

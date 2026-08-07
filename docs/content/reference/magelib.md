@@ -301,7 +301,7 @@ Off a tag ref it returns an error rather than nil. A check that silently succeed
 Comparison is exact string equality, not semver. The silo's tags carry suffixes like \-proto2f, and a parser would introduce a normalisation step in which two spellings could compare equal \- the opposite of what a drift gate wants.
 
 <a name="DocsBuild"></a>
-## func [DocsBuild](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L338>)
+## func [DocsBuild](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L371>)
 
 ```go
 func DocsBuild(cfg DocsConfig) error
@@ -319,7 +319,7 @@ func DocsGenerate(cfg DocsConfig) error
 DocsGenerate syncs the assets, renders the API reference, and runs every configured generator, writing into the working tree.
 
 <a name="DocsServe"></a>
-## func [DocsServe](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L353>)
+## func [DocsServe](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L386>)
 
 ```go
 func DocsServe(cfg DocsConfig) error

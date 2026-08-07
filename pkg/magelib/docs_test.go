@@ -100,6 +100,45 @@ func syncInto(t *testing.T, cfg DocsConfig) (string, []string) {
 	return dir, got
 }
 
+func TestGomarkdocArgs_PinsTheRepositoryRatherThanInferringIt(t *testing.T) {
+	// gomarkdoc detects the repository from git state and emits source
+	// links only when detection succeeds. A developer checkout and a CI
+	// checkout detect differently, so the SAME source produced two
+	// legitimate renderings - 212 lines apart, links against no links -
+	// and the drift gate called one of them stale.
+	//
+	// Measured on magelib PR #33: green locally, red in CI, byte-identical
+	// once these three flags are passed. Detection is the defect; pinning
+	// is the fix.
+	cfg := testDocsConfig()
+	args := gomarkdocArgs(cfg, APIPackage{Path: "./pkg/magelib"}, "docs/content/reference/magelib.md")
+
+	joined := strings.Join(args, " ")
+	for _, want := range []string{
+		"--repository.url https://github.com/goppydae/magelib",
+		"--repository.default-branch main",
+		"--repository.path /",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("gomarkdoc args missing %q\ngot: %s", want, joined)
+		}
+	}
+}
+
+func TestGomarkdocArgs_RepositoryURLFollowsRepo(t *testing.T) {
+	// The URL is derived rather than configured, so a repo that sets Repo
+	// correctly cannot also get the link host wrong. Repo is already
+	// validated to carry no scheme, which is what makes the prefix safe.
+	cfg := testDocsConfig()
+	cfg.Repo = "github.com/goppydae/goblin"
+	args := gomarkdocArgs(cfg, APIPackage{Path: "./pkg/x"}, "out.md")
+
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--repository.url https://github.com/goppydae/goblin") {
+		t.Errorf("repository.url did not follow Repo\ngot: %s", joined)
+	}
+}
+
 func TestDocsSync_MaterialisesTheExpectedFileSet(t *testing.T) {
 	_, got := syncInto(t, testDocsConfig())
 	want := []string{
