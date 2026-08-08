@@ -279,3 +279,82 @@ func TestCheckToolchainPinReportsSkewNamingBothVersions(t *testing.T) {
 		t.Fatalf("got err = %v, want a real shell go version alongside the directive", err)
 	}
 }
+
+// The tests below assert hermeticResolutionTools rather than going
+// through Doctor, and the determinism boundary above is the reason: the
+// hermetic-resolution CHECK reads the ambient shell, so its PASS/FAIL is
+// not assertable. Which list it runs over is pure, and that is the whole
+// of MAGELIB-DIV-015.
+
+// TestHermeticResolutionToolsDeclaredReplacesTheBaseSet is the property
+// the entry exists for. gcc and protoc must be ABSENT, not merely
+// outnumbered - a repo that compiles nothing had to carry a C compiler
+// in its devshell to satisfy this check.
+func TestHermeticResolutionToolsDeclaredReplacesTheBaseSet(t *testing.T) {
+	got, err := hermeticResolutionTools(DoctorConfig{
+		DeclaredTools: []string{"go", "mage", "python3", "hugo"},
+	})
+	if err != nil {
+		t.Fatalf("declared tools: %v", err)
+	}
+
+	want := []string{"go", "mage", "python3", "hugo"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want exactly %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+	for _, forbidden := range []string{"gcc", "protoc"} {
+		for _, tool := range got {
+			if tool == forbidden {
+				t.Fatalf("declared list inherited %q from baseTools: %v", forbidden, got)
+			}
+		}
+	}
+}
+
+// TestHermeticResolutionToolsRejectsBothLists holds the config error the
+// field comment promises. Precedence would be the tempting alternative
+// and it is wrong: the caller has said both "extend the base set" and
+// "replace it", and guessing which cannot be audited.
+func TestHermeticResolutionToolsRejectsBothLists(t *testing.T) {
+	_, err := hermeticResolutionTools(DoctorConfig{
+		SharedTools:   []string{"hugo"},
+		DeclaredTools: []string{"go", "hugo"},
+	})
+	if err == nil {
+		t.Fatal("got nil, want a config error naming the contradiction")
+	}
+	for _, want := range []string{"SharedTools", "DeclaredTools"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not name %s: %v", want, err)
+		}
+	}
+}
+
+// TestHermeticResolutionToolsWithoutDeclaredIsStillAdditive keeps
+// MAGELIB-DIV-003's resolution intact. The additive form is right for
+// the three repos that do compile C and generate protobuf, and -015 adds
+// a way to be explicit rather than removing a convenience.
+func TestHermeticResolutionToolsWithoutDeclaredIsStillAdditive(t *testing.T) {
+	got, err := hermeticResolutionTools(DoctorConfig{SharedTools: []string{"buf"}})
+	if err != nil {
+		t.Fatalf("additive form: %v", err)
+	}
+
+	for _, want := range append(append([]string{}, baseTools...), "buf") {
+		found := false
+		for _, tool := range got {
+			if tool == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("additive list dropped %q: %v", want, got)
+		}
+	}
+}
