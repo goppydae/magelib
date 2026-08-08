@@ -150,7 +150,12 @@ func TestDocsSync_MaterialisesTheExpectedFileSet(t *testing.T) {
 		"layouts/partials/sidebar/element/githublink.html",
 		"layouts/partials/sidebar/element/homelink.html",
 		"layouts/partials/sidebar/element/pkgsite.html",
-		"layouts/reference/article.html",
+		// layouts/reference/article.html is DELIBERATELY ABSENT
+		// (MAGELIB-DIV-012). It was relearn's stock template with the
+		// title h1 removed, scoped by Hugo lookup to the reference
+		// section, and it is what made 75 generated pages render with no
+		// heading at all. Its removal is the fix, so this list is the
+		// assertion that it stays removed.
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("synced set:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

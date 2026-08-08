@@ -303,7 +303,7 @@ func docsGenerateInto(cfg DocsConfig, root string) error {
 		if err := runStreamed("gomarkdoc", gomarkdocArgs(cfg, pkg, out)...); err != nil {
 			return fmt.Errorf("gomarkdoc %s: %w", pkg.Path, err)
 		}
-		if err := prependFrontMatter(out, pkg.Title); err != nil {
+		if err := applyFrontMatter(out, pkg.Title); err != nil {
 			return err
 		}
 	}
@@ -349,21 +349,33 @@ func gomarkdocArgs(cfg DocsConfig, pkg APIPackage, out string) []string {
 	}
 }
 
-// prependFrontMatter puts a relearn front matter block in front of
-// gomarkdoc's output.
+// applyFrontMatter puts a relearn front matter block in front of
+// gomarkdoc's output and drops the h1 gomarkdoc opens with.
 //
 // It is idempotent by construction - it rewrites the whole file from
 // gomarkdoc's bytes each time - and it carries no date. A generated
 // artifact under a byte-comparing drift gate cannot contain a clock, and
 // front matter is the obvious place to reach for one.
-func prependFrontMatter(path, title string) error {
+//
+// THE LEADING h1 IS REMOVED HERE BECAUSE THIS IS THE ONLY PLACE THAT
+// OWNS THE ASSEMBLED FILE. Front matter supplies the title and the theme
+// renders it (operator decision 62), so gomarkdoc's own "# magelib" is a
+// second h1 on the same page - the one open work item decision 62 named
+// for itself. The alternative was a gomarkdoc template override, which
+// that decision said to RAISE rather than build quietly, since a forked
+// template is what produced MAGELIB-DIV-012 in the first place. Nine
+// lines here beat a fork.
+//
+// Only the FIRST heading is dropped, and only before any other content,
+// so a "#" inside a later code block is untouched.
+func applyFrontMatter(path, title string) error {
 	body, err := os.ReadFile(path) // #nosec G304 -- path is repo-relative config, validated by DocsConfig.validate
 	if err != nil {
 		return fmt.Errorf("reading generated %s: %w", path, err)
 	}
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "---\ntitle: %q\n---\n\n", title)
-	buf.Write(body)
+	buf.Write(dropLeadingH1(body))
 	return os.WriteFile(path, buf.Bytes(), 0o600)
 }
 
@@ -408,4 +420,30 @@ func hugoArgs(cfg DocsConfig) []string {
 		configs += ",config.yaml"
 	}
 	return []string{"--source", cfg.Dir, "--config", configs}
+}
+
+// dropLeadingH1 removes the first ATX h1 from generated markdown, along
+// with a blank line following it.
+//
+// Scans only until the first line that is neither blank nor an HTML
+// comment: gomarkdoc emits a "Code generated" banner before the heading,
+// and stopping at real content means a document whose first heading is
+// deeper than h1 is returned untouched rather than silently edited.
+func dropLeadingH1(body []byte) []byte {
+	lines := strings.Split(string(body), "\n")
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		if t == "" || strings.HasPrefix(t, "<!--") {
+			continue
+		}
+		if !strings.HasPrefix(t, "# ") {
+			return body
+		}
+		rest := lines[i+1:]
+		if len(rest) > 0 && strings.TrimSpace(rest[0]) == "" {
+			rest = rest[1:]
+		}
+		return []byte(strings.Join(append(lines[:i:i], rest...), "\n"))
+	}
+	return body
 }

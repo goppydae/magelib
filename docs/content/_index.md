@@ -2,8 +2,6 @@
 title: "magelib"
 ---
 
-# magelib
-
 Shared mage build helpers for the GoPPydae ecosystem. One library holds the
 gates that four repositories run, so a rule is written once and cannot be
 enforced differently in two places.
