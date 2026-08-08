@@ -177,11 +177,17 @@ func TestDocsSync_RendersConfigFromTheRepoValues(t *testing.T) {
 		"baseURL: https://goppydae.github.io/magelib/",
 		"editURL: https://github.com/goppydae/magelib/edit/main/docs/content/",
 		`url: "https://github.com/goppydae/magelib"`,
-		`repo: "github.com/goppydae/magelib"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("rendered config does not carry %q", want)
 		}
+	}
+	// The pkg.go.dev element is CONDITIONAL now (MAGELIB-DIV-015 is the
+	// hermetic one; this is -016). A repo that has not declared itself an
+	// importable module must not advertise a link that 404s, so its
+	// absence here is the assertion rather than an omission.
+	if strings.Contains(body, `repo: "github.com/goppydae/magelib"`) {
+		t.Error("rendered config advertises pkg.go.dev without ImportableModule set")
 	}
 	if strings.Contains(body, "<no value>") || strings.Contains(body, "{{") {
 		t.Errorf("rendered config still carries template syntax:\n%s", body)
@@ -250,5 +256,20 @@ func TestHugoArgs_NamesConfigYamlOnlyWhenItExists(t *testing.T) {
 	got = strings.Join(hugoArgs(cfg), " ")
 	if !strings.HasSuffix(got, ",config.yaml") {
 		t.Errorf("present config.yaml must be named LAST so the repo overrides the base, got %q", got)
+	}
+}
+
+// AND THE OTHER DIRECTION, or the assertion above would be satisfied by
+// a template that never emits the element at all.
+func TestDocsSync_AdvertisesPkgSiteWhenTheRepoIsAModule(t *testing.T) {
+	cfg := testDocsConfig()
+	cfg.ImportableModule = true
+	syncInto(t, cfg)
+	data, err := os.ReadFile(filepath.Join(cfg.Dir, magelibDir, "hugo-base.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `repo: "github.com/goppydae/magelib"`) {
+		t.Errorf("ImportableModule is set and the config does not advertise pkg.go.dev:\n%s", data)
 	}
 }
