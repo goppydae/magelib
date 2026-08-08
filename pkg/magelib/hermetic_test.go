@@ -137,3 +137,53 @@ func TestCheckStorePathRejectsAToolResolvingOutsideTheStore(t *testing.T) {
 		t.Fatalf("got err = %v, want it to name the resolved path %v", err, want)
 	}
 }
+
+// A REPO THAT DECLARES ITS WHOLE TOOL SET INHERITS NOTHING.
+//
+// MAGELIB-DIV-015. CheckHermetic resolves baseTools before a caller's
+// extras, so a repo running hugo and a linter still had to put gcc and
+// protoc in its devshell to pass a gate meant to prove that shell is
+// hermetic. CheckHermeticTools takes the list and adds nothing.
+func TestHermeticToolsDoesNotInheritTheBaseSet(t *testing.T) {
+	// The base set is what the additive form would have added.
+	for _, base := range baseTools {
+		if base == "go" {
+			continue // "go" is in every declared set anyway
+		}
+		found := false
+		for _, tool := range hermeticTools(nil) {
+			if tool == base {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("baseTools contains %q but hermeticTools omits it; the premise of this test is stale", base)
+		}
+	}
+
+	// A declared set of exactly {go} must not pull gcc or protoc in.
+	// Asserted through the error rather than a resolve, so the test does
+	// not depend on which tools this machine happens to have.
+	err := CheckHermeticTools("definitely-not-a-real-tool-xyz")
+	if err == nil {
+		t.Fatal("a declared set naming a missing tool passed")
+	}
+	for _, base := range baseTools {
+		if strings.Contains(err.Error(), base) {
+			t.Errorf("the failure names %q, which the caller did not declare: %v", base, err)
+		}
+	}
+}
+
+// AN EMPTY DECLARED SET IS A FAILURE, NOT A PASS. A hermetic check over
+// no tools resolves nothing and reports success, which is the
+// gate-that-cannot-fail this repository keeps having to remove.
+func TestHermeticToolsRejectsAnEmptySet(t *testing.T) {
+	err := CheckHermeticTools()
+	if err == nil {
+		t.Fatal("a check over zero tools passed")
+	}
+	if !strings.Contains(err.Error(), "no tools declared") {
+		t.Errorf("failure does not say it checked nothing: %v", err)
+	}
+}

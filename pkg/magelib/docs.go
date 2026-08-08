@@ -98,8 +98,30 @@ type DocsConfig struct {
 	BaseURL string
 	// Repo is the repository's canonical path without a scheme, e.g.
 	// "github.com/goppydae/magelib". It supplies the sidebar's GitHub
-	// link, the pkg.go.dev link, and the default EditURL.
+	// link and the default EditURL, and names the module for the
+	// pkg.go.dev link when ImportableModule is set.
 	Repo string
+	// ImportableModule says this repository is a Go module somebody can
+	// import, and turns on the sidebar's pkg.go.dev link.
+	//
+	// OFF BY DEFAULT BECAUSE THE LINK WAS WRONG FOR EVERY REPO THAT HAD
+	// IT (MAGELIB-DIV-016). The element was emitted unconditionally, so
+	// all four sites advertised https://pkg.go.dev/<repo> - which 404s
+	// for a private repository, and is meaningless FOREVER for
+	// goppydae-docs, a documentation repo that carries a go.mod only so
+	// Hugo can resolve its theme and mage can compile a Magefile.
+	//
+	// A repo could not decline it: Repo supplied the GitHub link, the
+	// pkg.go.dev link and the default EditURL at once, so keeping two
+	// meant keeping the third, and Hugo REPLACES rather than merges a
+	// config slice - dropping one menu element meant restating the whole
+	// block, which drifts by omission the moment magelib adds an entry.
+	//
+	// Defaulting OFF rather than on is the direction that cannot
+	// mislead: an absent link says nothing, while a present one that
+	// 404s is a claim the site cannot honour. A repo that is genuinely
+	// published sets this.
+	ImportableModule bool
 	// EditURL is the base for per-page "edit this page" links. Derived
 	// from Repo and Dir when empty, which is the correct value for every
 	// repo in this silo; setting it is for a repo whose default branch
@@ -268,11 +290,15 @@ func (c DocsConfig) renderBaseConfig(tmpl []byte) ([]byte, error) {
 		return nil, fmt.Errorf("parsing hugo-base template: %w", err)
 	}
 	var buf bytes.Buffer
-	err = t.Execute(&buf, struct{ Title, BaseURL, Repo, EditURL string }{
-		Title:   c.Title,
-		BaseURL: c.BaseURL,
-		Repo:    c.Repo,
-		EditURL: c.editURL(),
+	err = t.Execute(&buf, struct {
+		Title, BaseURL, Repo, EditURL string
+		ImportableModule              bool
+	}{
+		Title:            c.Title,
+		BaseURL:          c.BaseURL,
+		Repo:             c.Repo,
+		EditURL:          c.editURL(),
+		ImportableModule: c.ImportableModule,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("rendering hugo-base config: %w", err)
@@ -470,5 +496,8 @@ func CheckDocs(cfg DocsConfig) error {
 	if err := CheckDocsDrift(cfg); err != nil {
 		return err
 	}
-	return CheckRenderedH1(cfg)
+	if err := CheckRenderedH1(cfg); err != nil {
+		return err
+	}
+	return CheckAdvertisedTaxonomies(cfg)
 }

@@ -14,6 +14,7 @@ import "github.com/goppydae/magelib/pkg/magelib"
 - [func AddLicenseHeaders\(cfg LicenseConfig, skips ...Skip\) \(\[\]string, error\)](<#AddLicenseHeaders>)
 - [func AssertClean\(paths ...string\) error](<#AssertClean>)
 - [func BufGenerate\(against string\) error](<#BufGenerate>)
+- [func CheckAdvertisedTaxonomies\(cfg DocsConfig\) error](<#CheckAdvertisedTaxonomies>)
 - [func CheckDeprecation\(path string\) error](<#CheckDeprecation>)
 - [func CheckDivergence\(path string\) error](<#CheckDivergence>)
 - [func CheckDocs\(cfg DocsConfig\) error](<#CheckDocs>)
@@ -21,6 +22,7 @@ import "github.com/goppydae/magelib/pkg/magelib"
 - [func CheckDocsDrift\(cfg DocsConfig\) error](<#CheckDocsDrift>)
 - [func CheckFileLength\(waivers \[\]string, skips ...Skip\) error](<#CheckFileLength>)
 - [func CheckHermetic\(extra ...string\) error](<#CheckHermetic>)
+- [func CheckHermeticTools\(tools ...string\) error](<#CheckHermeticTools>)
 - [func CheckLicenseHeaders\(cfg LicenseConfig, skips ...Skip\) error](<#CheckLicenseHeaders>)
 - [func CheckRenderedH1\(cfg DocsConfig\) error](<#CheckRenderedH1>)
 - [func CheckShellUnification\(shells map\[string\]string, tools \[\]string, pins ...ModulePins\) error](<#CheckShellUnification>)
@@ -143,6 +145,21 @@ PROTO\_BREAKING\_SKIP=1 skips the breaking step, loudly. Its one legitimate use 
 
 PROTO\_BREAKING\_AGAINST overrides the caller's baseline. The callers pass ".git\#ref=HEAD", which is right for a developer comparing an edited working tree against the last commit, and useless anywhere the working tree IS the commit: a fresh CI checkout compares the schema against itself and cannot fail. CI must therefore name a baseline it does not already equal \(the pull request's merge base, or HEAD\~1 on a push\). The chosen baseline is echoed before the run so a build log records what the gate actually compared.
 
+<a name="CheckAdvertisedTaxonomies"></a>
+## func [CheckAdvertisedTaxonomies](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docstaxonomy.go#L56>)
+
+```go
+func CheckAdvertisedTaxonomies(cfg DocsConfig) error
+```
+
+CheckAdvertisedTaxonomies asserts that every link the site advertises resolves, and that an advertised TAXONOMY index carries at least one term.
+
+THE DEFECT IS A SIDEBAR THAT PROMISES SOMETHING THE SITE DOES NOT HAVE \(MAGELIB\-DIV\-013\). The shared Hugo base declares \`category\` and \`tag\` taxonomies and hardcodes a menu naming both, and DocsSync materialises that into every consumer \- so all three published sites carried a Categories and a Tags link to indexes that nothing populates. Measured when the entry was filed: zero pages in any repo declare either.
+
+IT IS DIRECTIONLESS ON PURPOSE, which the entry insists on because the underlying question is undecided. It closes if the taxonomies are POPULATED, because the terms then exist. It closes if they are DROPPED, because there is then no advertised link left to resolve. And the second half is what stops the fix being applied halfway: a menu entry whose target the site does not render is a failure too, so removing the taxonomies while leaving the menu is caught rather than passing vacuously \- which is this defect one direction later.
+
+It reads the EFFECTIVE Hugo configuration rather than the template, because the template is not what the site was built from: a repo may add its own config.yaml, and Hugo REPLACES rather than merges a config slice. Asking hugo what it actually used is the only source that cannot be stale.
+
 <a name="CheckDeprecation"></a>
 ## func [CheckDeprecation](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ledger.go#L186>)
 
@@ -162,7 +179,7 @@ func CheckDivergence(path string) error
 CheckDivergence validates a divergence ledger's structure.
 
 <a name="CheckDocs"></a>
-## func [CheckDocs](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L469>)
+## func [CheckDocs](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L495>)
 
 ```go
 func CheckDocs(cfg DocsConfig) error
@@ -238,7 +255,7 @@ Every violation is reported, not just the first: a gate that stops at the first 
 Unreadable files are an ERROR, not a skip: a gate that cannot read a file must not report it clean.
 
 <a name="CheckHermetic"></a>
-## func [CheckHermetic](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/hermetic.go#L34>)
+## func [CheckHermetic](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/hermetic.go#L38>)
 
 ```go
 func CheckHermetic(extra ...string) error
@@ -247,6 +264,23 @@ func CheckHermetic(extra ...string) error
 CheckHermetic ensures every core tool resolves from the Nix store and that the shell's go toolchain matches the go.mod toolchain directive. Any violation fails closed \(hermetic shell rule; the double pin\).
 
 extra names tools beyond the base compiler set that the caller's targets actually execute \-\- golangci\-lint, gosec, buf. It is variadic so callers that pass nothing keep compiling: gapi and goblin vendor this package and call CheckHermetic\(\) with no arguments. Callers should feed it the same value they hand DoctorConfig.SharedTools, so the doctor and the gate cannot report different tool sets.
+
+IT ADDS TO baseTools AND CANNOT SUBTRACT, which is correct for a repo that compiles C and generates protobuf and wrong for one that does neither. See CheckHermeticTools.
+
+<a name="CheckHermeticTools"></a>
+## func [CheckHermeticTools](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/hermetic.go#L63>)
+
+```go
+func CheckHermeticTools(tools ...string) error
+```
+
+CheckHermeticTools is CheckHermetic for a repo that declares its WHOLE tool set, inheriting nothing.
+
+baseTools is \{go, gcc, protoc\} and CheckHermetic resolves it BEFORE a caller's extras, so the additive form has no way to say "this repo does not build C" \(MAGELIB\-DIV\-015\). goppydae\-docs runs hugo, a linter and a content gate, and carried gcc and protobuf in its flake for no reason but this gate \- written down in that flake under a nine\-line comment naming this variable as the cause.
+
+THE ADDITIVE FORM IS NOT DEPRECATED BY THIS, and that is the point. MAGELIB\-DIV\-003 was the opposite complaint \- the gate covered too FEW tools \- and it resolved by making CheckHermetic variadic so a repo could ADD. That resolution stands and remains right for the three repos that do compile C and generate protobuf. What was missing is the ability to SUBTRACT, which \-003 never needed because all three of its repos wanted the base set.
+
+The pandoc probe is deliberately absent here: it reads PATH and adds a tool the caller did not name, which is exactly the inheritance this entry point exists to refuse.
 
 <a name="CheckLicenseHeaders"></a>
 ## func [CheckLicenseHeaders](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/licensewalk.go#L60>)
@@ -307,7 +341,7 @@ A single line may waive its own match with the marker "terminology:allow" \(see 
 Unreadable files are an ERROR, not a skip: a gate that cannot read a file must not report it clean.
 
 <a name="CheckToolchainPin"></a>
-## func [CheckToolchainPin](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/hermetic.go#L81>)
+## func [CheckToolchainPin](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/hermetic.go#L122>)
 
 ```go
 func CheckToolchainPin(gomodPath string) error
@@ -331,7 +365,7 @@ Off a tag ref it returns an error rather than nil. A check that silently succeed
 Comparison is exact string equality, not semver. The silo's tags carry suffixes like \-proto2f, and a parser would introduce a normalisation step in which two spellings could compare equal \- the opposite of what a drift gate wants.
 
 <a name="DocsBuild"></a>
-## func [DocsBuild](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L383>)
+## func [DocsBuild](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L409>)
 
 ```go
 func DocsBuild(cfg DocsConfig) error
@@ -340,7 +374,7 @@ func DocsBuild(cfg DocsConfig) error
 DocsBuild generates the reference and renders the static site.
 
 <a name="DocsGenerate"></a>
-## func [DocsGenerate](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L285>)
+## func [DocsGenerate](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L311>)
 
 ```go
 func DocsGenerate(cfg DocsConfig) error
@@ -349,7 +383,7 @@ func DocsGenerate(cfg DocsConfig) error
 DocsGenerate syncs the assets, renders the API reference, and runs every configured generator, writing into the working tree.
 
 <a name="DocsServe"></a>
-## func [DocsServe](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L398>)
+## func [DocsServe](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L424>)
 
 ```go
 func DocsServe(cfg DocsConfig) error
@@ -358,7 +392,7 @@ func DocsServe(cfg DocsConfig) error
 DocsServe generates the reference and runs Hugo's own server, which is how the private hub is read: GitHub Pages needs a public repository or an Enterprise plan, and the hub has neither by decision.
 
 <a name="DocsSync"></a>
-## func [DocsSync](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L211>)
+## func [DocsSync](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L233>)
 
 ```go
 func DocsSync(cfg DocsConfig) error
@@ -578,7 +612,7 @@ type DefaultEntry struct {
 ```
 
 <a name="DocsConfig"></a>
-## type [DocsConfig](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L91-L126>)
+## type [DocsConfig](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L91-L148>)
 
 DocsConfig describes one repository's documentation site.
 
@@ -595,8 +629,30 @@ type DocsConfig struct {
     BaseURL string
     // Repo is the repository's canonical path without a scheme, e.g.
     // "github.com/goppydae/magelib". It supplies the sidebar's GitHub
-    // link, the pkg.go.dev link, and the default EditURL.
+    // link and the default EditURL, and names the module for the
+    // pkg.go.dev link when ImportableModule is set.
     Repo string
+    // ImportableModule says this repository is a Go module somebody can
+    // import, and turns on the sidebar's pkg.go.dev link.
+    //
+    // OFF BY DEFAULT BECAUSE THE LINK WAS WRONG FOR EVERY REPO THAT HAD
+    // IT (MAGELIB-DIV-016). The element was emitted unconditionally, so
+    // all four sites advertised https://pkg.go.dev/<repo> - which 404s
+    // for a private repository, and is meaningless FOREVER for
+    // goppydae-docs, a documentation repo that carries a go.mod only so
+    // Hugo can resolve its theme and mage can compile a Magefile.
+    //
+    // A repo could not decline it: Repo supplied the GitHub link, the
+    // pkg.go.dev link and the default EditURL at once, so keeping two
+    // meant keeping the third, and Hugo REPLACES rather than merges a
+    // config slice - dropping one menu element meant restating the whole
+    // block, which drifts by omission the moment magelib adds an entry.
+    //
+    // Defaulting OFF rather than on is the direction that cannot
+    // mislead: an absent link says nothing, while a present one that
+    // 404s is a claim the site cannot honour. A repo that is genuinely
+    // published sets this.
+    ImportableModule bool
     // EditURL is the base for per-page "edit this page" links. Derived
     // from Repo and Dir when empty, which is the correct value for every
     // repo in this silo; setting it is for a repo whose default branch
