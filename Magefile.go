@@ -213,6 +213,14 @@ var docsConfig = magelib.DocsConfig{
 	Title:   "magelib",
 	BaseURL: "https://goppydae.github.io/magelib/",
 	Repo:    "github.com/goppydae/magelib",
+	// magelib is the one repo in the silo that exists ONLY to be
+	// imported, so a sidebar without this was the strangest omission of
+	// the four. MAGELIB-DIV-016 made the pkg.go.dev element opt-in and
+	// no consumer opted in, which left every site - including this one -
+	// with the link deleted rather than made correct, the outcome that
+	// entry's exit explicitly warned against. github.com/goppydae/magelib
+	// serves 200 on pkg.go.dev, measured 2026-08-08.
+	ImportableModule: true,
 	APIPackages: []magelib.APIPackage{
 		{Path: "./pkg/magelib", Out: "docs/content/reference/magelib.md", Title: "magelib"},
 	},

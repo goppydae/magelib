@@ -179,7 +179,7 @@ func CheckDivergence(path string) error
 CheckDivergence validates a divergence ledger's structure.
 
 <a name="CheckDocs"></a>
-## func [CheckDocs](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L495>)
+## func [CheckDocs](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L501>)
 
 ```go
 func CheckDocs(cfg DocsConfig) error
@@ -365,7 +365,7 @@ Off a tag ref it returns an error rather than nil. A check that silently succeed
 Comparison is exact string equality, not semver. The silo's tags carry suffixes like \-proto2f, and a parser would introduce a normalisation step in which two spellings could compare equal \- the opposite of what a drift gate wants.
 
 <a name="DocsBuild"></a>
-## func [DocsBuild](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L409>)
+## func [DocsBuild](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L415>)
 
 ```go
 func DocsBuild(cfg DocsConfig) error
@@ -374,7 +374,7 @@ func DocsBuild(cfg DocsConfig) error
 DocsBuild generates the reference and renders the static site.
 
 <a name="DocsGenerate"></a>
-## func [DocsGenerate](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L311>)
+## func [DocsGenerate](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L317>)
 
 ```go
 func DocsGenerate(cfg DocsConfig) error
@@ -383,7 +383,7 @@ func DocsGenerate(cfg DocsConfig) error
 DocsGenerate syncs the assets, renders the API reference, and runs every configured generator, writing into the working tree.
 
 <a name="DocsServe"></a>
-## func [DocsServe](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L424>)
+## func [DocsServe](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L430>)
 
 ```go
 func DocsServe(cfg DocsConfig) error
@@ -392,7 +392,7 @@ func DocsServe(cfg DocsConfig) error
 DocsServe generates the reference and runs Hugo's own server, which is how the private hub is read: GitHub Pages needs a public repository or an Enterprise plan, and the hub has neither by decision.
 
 <a name="DocsSync"></a>
-## func [DocsSync](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L233>)
+## func [DocsSync](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L239>)
 
 ```go
 func DocsSync(cfg DocsConfig) error
@@ -612,7 +612,7 @@ type DefaultEntry struct {
 ```
 
 <a name="DocsConfig"></a>
-## type [DocsConfig](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L91-L148>)
+## type [DocsConfig](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L91-L154>)
 
 DocsConfig describes one repository's documentation site.
 
@@ -635,20 +635,26 @@ type DocsConfig struct {
     // ImportableModule says this repository is a Go module somebody can
     // import, and turns on the sidebar's pkg.go.dev link.
     //
-    // OFF BY DEFAULT BECAUSE THE LINK WAS WRONG FOR EVERY REPO THAT HAD
-    // IT (MAGELIB-DIV-016). The element was emitted unconditionally, so
-    // all four sites advertised https://pkg.go.dev/<repo> - which 404s
-    // for a private repository, and is meaningless FOREVER for
-    // goppydae-docs, a documentation repo that carries a go.mod only so
-    // Hugo can resolve its theme and mage can compile a Magefile.
+    // OPT-IN BECAUSE THE ELEMENT WAS EMITTED UNCONDITIONALLY AND NO
+    // CONSUMER COULD DECLINE IT (MAGELIB-DIV-016). Repo supplies the
+    // GitHub link, the pkg.go.dev link and the default EditURL at once,
+    // so keeping two meant keeping the third, and Hugo REPLACES rather
+    // than merges a config slice - dropping one menu element meant
+    // restating the whole block, which drifts by omission the moment
+    // magelib adds an entry.
     //
-    // A repo could not decline it: Repo supplied the GitHub link, the
-    // pkg.go.dev link and the default EditURL at once, so keeping two
-    // meant keeping the third, and Hugo REPLACES rather than merges a
-    // config slice - dropping one menu element meant restating the whole
-    // block, which drifts by omission the moment magelib adds an entry.
+    // THE ENTRY GAVE TWO REASONS FOR THE LINK BEING WRONG AND ONLY ONE
+    // SURVIVES. It said the repos are private, so pkg.go.dev has nothing
+    // to serve and the link 404s on all four sites. That expired:
+    // operator decision 24 published them, and measured 2026-08-08 gapi,
+    // goblin and magelib are public with pkg.go.dev serving gapi and
+    // magelib. Only goppydae-docs remains, and it is the DURABLE half -
+    // not a Go library at all, carrying a go.mod solely so Hugo can
+    // resolve its theme and mage can compile a Magefile, and private
+    // permanently. So the three code repos set this and the hub does
+    // not.
     //
-    // Defaulting OFF rather than on is the direction that cannot
+    // Defaulting OFF rather than on is still the direction that cannot
     // mislead: an absent link says nothing, while a present one that
     // 404s is a claim the site cannot honour. A repo that is genuinely
     // published sets this.
