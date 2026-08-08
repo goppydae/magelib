@@ -68,9 +68,15 @@ func CheckRenderedH1(cfg DocsConfig) error {
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 
-	if err := DocsGenerate(cfg); err != nil {
-		return fmt.Errorf("h1 check: generate: %w", err)
-	}
+	// IT DOES NOT REGENERATE, AND THE FIRST VERSION DID. A check that
+	// rewrites committed files as a side effect is not a check; it left
+	// the drift gate reporting staleness this check had just caused, and
+	// CheckDocsDrift avoids the same trap by working in a temp tree.
+	//
+	// Rendering what is already committed is only meaningful if that
+	// output is current, which is exactly what CheckDocsDrift proves - so
+	// CheckDocs runs drift FIRST and this second. Called on its own
+	// against a stale tree, this reports on the stale tree.
 	args := append(hugoArgs(cfg), "--minify", "--destination", tmp)
 	if err := runStreamed("hugo", args...); err != nil {
 		return fmt.Errorf("h1 check: render: %w", err)
