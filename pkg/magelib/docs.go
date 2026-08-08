@@ -104,20 +104,26 @@ type DocsConfig struct {
 	// ImportableModule says this repository is a Go module somebody can
 	// import, and turns on the sidebar's pkg.go.dev link.
 	//
-	// OFF BY DEFAULT BECAUSE THE LINK WAS WRONG FOR EVERY REPO THAT HAD
-	// IT (MAGELIB-DIV-016). The element was emitted unconditionally, so
-	// all four sites advertised https://pkg.go.dev/<repo> - which 404s
-	// for a private repository, and is meaningless FOREVER for
-	// goppydae-docs, a documentation repo that carries a go.mod only so
-	// Hugo can resolve its theme and mage can compile a Magefile.
+	// OPT-IN BECAUSE THE ELEMENT WAS EMITTED UNCONDITIONALLY AND NO
+	// CONSUMER COULD DECLINE IT (MAGELIB-DIV-016). Repo supplies the
+	// GitHub link, the pkg.go.dev link and the default EditURL at once,
+	// so keeping two meant keeping the third, and Hugo REPLACES rather
+	// than merges a config slice - dropping one menu element meant
+	// restating the whole block, which drifts by omission the moment
+	// magelib adds an entry.
 	//
-	// A repo could not decline it: Repo supplied the GitHub link, the
-	// pkg.go.dev link and the default EditURL at once, so keeping two
-	// meant keeping the third, and Hugo REPLACES rather than merges a
-	// config slice - dropping one menu element meant restating the whole
-	// block, which drifts by omission the moment magelib adds an entry.
+	// THE ENTRY GAVE TWO REASONS FOR THE LINK BEING WRONG AND ONLY ONE
+	// SURVIVES. It said the repos are private, so pkg.go.dev has nothing
+	// to serve and the link 404s on all four sites. That expired:
+	// operator decision 24 published them, and measured 2026-08-08 gapi,
+	// goblin and magelib are public with pkg.go.dev serving gapi and
+	// magelib. Only goppydae-docs remains, and it is the DURABLE half -
+	// not a Go library at all, carrying a go.mod solely so Hugo can
+	// resolve its theme and mage can compile a Magefile, and private
+	// permanently. So the three code repos set this and the hub does
+	// not.
 	//
-	// Defaulting OFF rather than on is the direction that cannot
+	// Defaulting OFF rather than on is still the direction that cannot
 	// mislead: an absent link says nothing, while a present one that
 	// 404s is a claim the site cannot honour. A repo that is genuinely
 	// published sets this.
