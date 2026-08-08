@@ -403,7 +403,7 @@ DocsSync materialises the embedded asset tree into \<Dir\>/.magelib and renders 
 The target directory is REMOVED first rather than written over. A renamed or deleted asset that survives in a consumer's tree keeps being served by Hugo, so the site renders from a file no version of magelib produces any more \- stale in a directory nobody reads because it is generated and gitignored.
 
 <a name="Doctor"></a>
-## func [Doctor](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/doctor.go#L47>)
+## func [Doctor](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/doctor.go#L65>)
 
 ```go
 func Doctor(cfg DoctorConfig) error
@@ -736,7 +736,7 @@ func (e *DocsDriftError) Error() string
 
 
 <a name="DoctorConfig"></a>
-## type [DoctorConfig](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/doctor.go#L22-L41>)
+## type [DoctorConfig](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/doctor.go#L22-L59>)
 
 DoctorConfig carries the per\-repo facts the doctor checks against. The checks themselves are ecosystem policy and live here; the differences between repos are data, not forks.
 
@@ -756,6 +756,24 @@ type DoctorConfig struct {
     // SharedTools extends the hermetic-resolution tool list beyond the base
     // compiler set (linters, buf, docs toolchain, ...).
     SharedTools []string
+    // DeclaredTools is the WHOLE hermetic-resolution tool list, inheriting
+    // nothing. It is the DoctorConfig counterpart to CheckHermeticTools.
+    //
+    // WITHOUT IT THE DOCTOR STILL FORCED A COMPILER SET ON A REPO THAT
+    // COMPILES NOTHING (MAGELIB-DIV-015). CheckHermeticTools gave the LINT
+    // path a way to declare its own set, and this check kept prepending
+    // baseTools regardless - so goppydae-docs dropped gcc and protobuf
+    // from its flake, watched `mage lint` pass, and got `FAIL
+    // hermetic-resolution  protoc not found. Run 'nix develop'` from
+    // `mage doctor` in the same shell. Half a mechanism, which is the
+    // shape this repository's ledger keeps catching.
+    //
+    // Mutually exclusive with SharedTools, and setting both is a config
+    // ERROR rather than a precedence rule: SharedTools EXTENDS the base
+    // set and DeclaredTools REPLACES it, so a caller setting both has
+    // stated a contradiction about which it meant. Same call the file-
+    // length gate makes for a path claimed as both a waiver and a skip.
+    DeclaredTools []string
     // Out receives the per-check report lines. Nil means os.Stdout, which
     // is what every Magefile caller wants; tests set it to capture the
     // output contract.
