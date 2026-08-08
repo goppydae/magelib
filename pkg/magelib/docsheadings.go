@@ -68,8 +68,22 @@ func CheckRenderedH1(cfg DocsConfig) error {
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 
-	if err := DocsGenerate(cfg); err != nil {
-		return fmt.Errorf("h1 check: generate: %w", err)
+	// SYNC BUT DO NOT GENERATE, and both halves were learned the hard way.
+	//
+	// The first version called DocsGenerate, so a CHECK rewrote committed
+	// files as a side effect and the drift gate then reported staleness
+	// this check had just caused. The second version removed that call
+	// entirely and broke in CI with "inspected ZERO rendered pages":
+	// DocsGenerate is DocsSync plus generation, and DocsSync is what
+	// materialises docs/.magelib - which is GITIGNORED, so a fresh
+	// checkout has no hugo config at all and renders nothing. It passed
+	// locally only because a previous build had left the directory there.
+	//
+	// DocsSync alone gives both properties: the assets exist, and nothing
+	// TRACKED is touched. Freshness of the generated CONTENT is carried
+	// by CheckDocs running CheckDocsDrift first.
+	if err := DocsSync(cfg); err != nil {
+		return fmt.Errorf("h1 check: sync assets: %w", err)
 	}
 	args := append(hugoArgs(cfg), "--minify", "--destination", tmp)
 	if err := runStreamed("hugo", args...); err != nil {

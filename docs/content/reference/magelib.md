@@ -16,6 +16,7 @@ import "github.com/goppydae/magelib/pkg/magelib"
 - [func BufGenerate\(against string\) error](<#BufGenerate>)
 - [func CheckDeprecation\(path string\) error](<#CheckDeprecation>)
 - [func CheckDivergence\(path string\) error](<#CheckDivergence>)
+- [func CheckDocs\(cfg DocsConfig\) error](<#CheckDocs>)
 - [func CheckDocsDefaults\(cfg DocsConfig, waivers \[\]string, skips ...Skip\) error](<#CheckDocsDefaults>)
 - [func CheckDocsDrift\(cfg DocsConfig\) error](<#CheckDocsDrift>)
 - [func CheckFileLength\(waivers \[\]string, skips ...Skip\) error](<#CheckFileLength>)
@@ -159,6 +160,21 @@ func CheckDivergence(path string) error
 ```
 
 CheckDivergence validates a divergence ledger's structure.
+
+<a name="CheckDocs"></a>
+## func [CheckDocs](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docs.go#L469>)
+
+```go
+func CheckDocs(cfg DocsConfig) error
+```
+
+CheckDocs runs every documentation gate, in the order they depend on.
+
+ONE ENTRY POINT SO A NEW GATE COSTS CONSUMERS NOTHING. Each repo's Docs.Check used to call CheckDocsDrift directly, so adding a gate meant editing three Magefiles and waiting for a release and a re\-vendor in each \- which is the per\-repo drift the shared build library exists to prevent, arriving through the wiring instead of through the rule. Consumers call this; gates are added here.
+
+ORDER IS LOAD\-BEARING, NOT ALPHABETICAL. CheckDocsDrift proves the committed generated output matches a fresh regeneration. Every gate after it reads that output, so running them first would have them assert against files nobody has shown to be current \- and a gate that measures a stale tree reports a fact about that tree's age.
+
+It stops at the FIRST failure deliberately. A stale reference makes every later result a statement about the wrong bytes, so reporting them together would pad one real failure with derived ones.
 
 <a name="CheckDocsDefaults"></a>
 ## func [CheckDocsDefaults](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/docsdefaults.go#L121>)
