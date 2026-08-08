@@ -23,6 +23,7 @@ import "github.com/goppydae/magelib/pkg/magelib"
 - [func CheckFileLength\(waivers \[\]string, skips ...Skip\) error](<#CheckFileLength>)
 - [func CheckHermetic\(extra ...string\) error](<#CheckHermetic>)
 - [func CheckHermeticTools\(tools ...string\) error](<#CheckHermeticTools>)
+- [func CheckLedgerClosures\(cfg LedgerClosureConfig\) error](<#CheckLedgerClosures>)
 - [func CheckLicenseHeaders\(cfg LicenseConfig, skips ...Skip\) error](<#CheckLicenseHeaders>)
 - [func CheckRenderedH1\(cfg DocsConfig\) error](<#CheckRenderedH1>)
 - [func CheckShellUnification\(shells map\[string\]string, tools \[\]string, pins ...ModulePins\) error](<#CheckShellUnification>)
@@ -57,6 +58,7 @@ import "github.com/goppydae/magelib/pkg/magelib"
 - [type DocsDriftError](<#DocsDriftError>)
   - [func \(e \*DocsDriftError\) Error\(\) string](<#DocsDriftError.Error>)
 - [type DoctorConfig](<#DoctorConfig>)
+- [type LedgerClosureConfig](<#LedgerClosureConfig>)
 - [type LicenseConfig](<#LicenseConfig>)
   - [func \(c LicenseConfig\) Notice\(ext string\) \(string, error\)](<#LicenseConfig.Notice>)
 - [type ModulePins](<#ModulePins>)
@@ -281,6 +283,15 @@ baseTools is \{go, gcc, protoc\} and CheckHermetic resolves it BEFORE a caller's
 THE ADDITIVE FORM IS NOT DEPRECATED BY THIS, and that is the point. MAGELIB\-DIV\-003 was the opposite complaint \- the gate covered too FEW tools \- and it resolved by making CheckHermetic variadic so a repo could ADD. That resolution stands and remains right for the three repos that do compile C and generate protobuf. What was missing is the ability to SUBTRACT, which \-003 never needed because all three of its repos wanted the base set.
 
 The pandoc probe is deliberately absent here: it reads PATH and adds a tool the caller did not name, which is exactly the inheritance this entry point exists to refuse.
+
+<a name="CheckLedgerClosures"></a>
+## func [CheckLedgerClosures](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ledgerclosures.go#L77>)
+
+```go
+func CheckLedgerClosures(cfg LedgerClosureConfig) error
+```
+
+CheckLedgerClosures fails when a commit declared an entry closed and the ledger still calls it open.
 
 <a name="CheckLicenseHeaders"></a>
 ## func [CheckLicenseHeaders](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/licensewalk.go#L60>)
@@ -778,6 +789,21 @@ type DoctorConfig struct {
     // is what every Magefile caller wants; tests set it to capture the
     // output contract.
     Out io.Writer
+}
+```
+
+<a name="LedgerClosureConfig"></a>
+## type [LedgerClosureConfig](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/ledgerclosures.go#L58-L64>)
+
+LedgerClosureConfig configures the owed\-closure gate.
+
+```go
+type LedgerClosureConfig struct {
+    // Path is the divergence ledger, normally "divergence.jsonl".
+    Path string
+
+    // Ref is the history to walk. Empty means HEAD.
+    Ref string
 }
 ```
 

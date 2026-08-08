@@ -48,8 +48,18 @@ jobs:
     name: Ecosystem Gates
     runs-on: ubuntu-latest
     steps:
+      # THE FULL HISTORY IS LOAD-BEARING FOR THE LINT GATE BELOW.
+      # Lint calls CheckLedgerClosures, which reads every commit for a
+      # `Closes:` footer. actions/checkout defaults to fetch-depth 1,
+      # which would leave that gate one commit to search, no footers to
+      # find, and a clean report covering nothing - the exact shape of
+      # a check that cannot run and reports success. The gate refuses a
+      # shallow repository rather than answering from one, so without
+      # this line the job goes red instead of quietly passing.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Synchronize Environment (Nix)
         uses: cachix/install-nix-action@v24
