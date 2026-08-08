@@ -68,15 +68,23 @@ func CheckRenderedH1(cfg DocsConfig) error {
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 
-	// IT DOES NOT REGENERATE, AND THE FIRST VERSION DID. A check that
-	// rewrites committed files as a side effect is not a check; it left
-	// the drift gate reporting staleness this check had just caused, and
-	// CheckDocsDrift avoids the same trap by working in a temp tree.
+	// SYNC BUT DO NOT GENERATE, and both halves were learned the hard way.
 	//
-	// Rendering what is already committed is only meaningful if that
-	// output is current, which is exactly what CheckDocsDrift proves - so
-	// CheckDocs runs drift FIRST and this second. Called on its own
-	// against a stale tree, this reports on the stale tree.
+	// The first version called DocsGenerate, so a CHECK rewrote committed
+	// files as a side effect and the drift gate then reported staleness
+	// this check had just caused. The second version removed that call
+	// entirely and broke in CI with "inspected ZERO rendered pages":
+	// DocsGenerate is DocsSync plus generation, and DocsSync is what
+	// materialises docs/.magelib - which is GITIGNORED, so a fresh
+	// checkout has no hugo config at all and renders nothing. It passed
+	// locally only because a previous build had left the directory there.
+	//
+	// DocsSync alone gives both properties: the assets exist, and nothing
+	// TRACKED is touched. Freshness of the generated CONTENT is carried
+	// by CheckDocs running CheckDocsDrift first.
+	if err := DocsSync(cfg); err != nil {
+		return fmt.Errorf("h1 check: sync assets: %w", err)
+	}
 	args := append(hugoArgs(cfg), "--minify", "--destination", tmp)
 	if err := runStreamed("hugo", args...); err != nil {
 		return fmt.Errorf("h1 check: render: %w", err)
