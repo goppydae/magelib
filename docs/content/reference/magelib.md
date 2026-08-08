@@ -203,13 +203,13 @@ It never writes to the working tree. A gate that regenerates in place REPAIRS th
 The check reports three distinct conditions rather than one. Stale means the source moved and the artifact did not. Missing means something is declared under drift control that generation does not produce, which is a configuration error pointing at a renamed output. Untracked means generation produces a file nothing gates \- the quiet one, and the reason the whole exercise is worth doing: an artifact outside Committed can drift forever and this check would stay green.
 
 <a name="CheckFileLength"></a>
-## func [CheckFileLength](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/filelength.go#L108>)
+## func [CheckFileLength](<https://github.com/goppydae/magelib/blob/main/pkg/magelib/filelength.go#L137>)
 
 ```go
 func CheckFileLength(waivers []string, skips ...Skip) error
 ```
 
-CheckFileLength fails when any hand\-written Go file in the repo rooted at the current directory is longer than maxFileLines. Like CheckTerminology it is meant to be wired into a Lint target with mg.Deps, so it rides a CI context that already blocks merges rather than becoming a target nobody invokes \- the failure mode GAPI\-DIV\-030 and MAGELIB\-DIV\-001 both recorded.
+CheckFileLength fails when any hand\-written Go file in the repo rooted at the current directory breaches either ceiling \- more than maxSourceLines of source, or more than maxRawLines to read. Like CheckTerminology it is meant to be wired into a Lint target with mg.Deps, so it rides a CI context that already blocks merges rather than becoming a target nobody invokes \- the failure mode GAPI\-DIV\-030 and MAGELIB\-DIV\-001 both recorded.
 
 Scope follows the manifesto's own carve\-outs and nothing else:
 

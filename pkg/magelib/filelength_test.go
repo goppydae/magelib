@@ -9,6 +9,7 @@
 package magelib
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -16,15 +17,27 @@ import (
 // goLines builds a Go-shaped file of exactly n lines. The first line is
 // not a comment, so nothing in it can be mistaken for a generated
 // marker.
+// goLines builds a file of exactly n SOURCE lines.
+//
+// It used to pad with "// filler", which stopped meaning anything the
+// moment the gate started counting source lines: such a file is one
+// source line however long it is. Every length assertion below would
+// have passed for the wrong reason - the shape of test failure this
+// repository keeps finding in its own gates.
 func goLines(n int) string {
 	if n == 0 {
 		return ""
 	}
-	return "package p\n" + strings.Repeat("// filler\n", n-1)
+	var b strings.Builder
+	b.WriteString("package p\n")
+	for i := 1; i < n; i++ {
+		fmt.Fprintf(&b, "var v%d = %d\n", i, i)
+	}
+	return b.String()
 }
 
 func TestCheckFileLengthReportsAnOverLimitFile(t *testing.T) {
-	writeTree(t, map[string]string{"big.go": goLines(maxFileLines + 1)})
+	writeTree(t, map[string]string{"big.go": goLines(maxSourceLines + 1)})
 	err := CheckFileLength(nil)
 	if err == nil {
 		t.Fatal("an over-limit file was reported clean")
@@ -34,10 +47,13 @@ func TestCheckFileLengthReportsAnOverLimitFile(t *testing.T) {
 	}
 	// The count and the limit both belong in the message: "too long" on
 	// its own does not tell the operator how much has to go.
-	if !strings.Contains(err.Error(), "501 lines") {
+	// Derived from the constant rather than spelled: a test that
+	// hardcodes the number breaks every time the ceiling is re-measured,
+	// which is an argument against re-measuring it.
+	if !strings.Contains(err.Error(), fmt.Sprintf("%d source lines", maxSourceLines+1)) {
 		t.Fatalf("error does not carry the line count: %v", err)
 	}
-	if !strings.Contains(err.Error(), "limit 500") {
+	if !strings.Contains(err.Error(), fmt.Sprintf("limit %d", maxSourceLines)) {
 		t.Fatalf("error does not carry the limit: %v", err)
 	}
 }
@@ -47,15 +63,15 @@ func TestCheckFileLengthReportsAnOverLimitFile(t *testing.T) {
 // grossly over - and would quietly move the ecosystem's limit by one.
 func TestCheckFileLengthBoundary(t *testing.T) {
 	t.Run("at the limit passes", func(t *testing.T) {
-		writeTree(t, map[string]string{"exact.go": goLines(maxFileLines)})
+		writeTree(t, map[string]string{"exact.go": goLines(maxSourceLines)})
 		if err := CheckFileLength(nil); err != nil {
-			t.Fatalf("a file of exactly %d lines failed: %v", maxFileLines, err)
+			t.Fatalf("a file of exactly %d lines failed: %v", maxSourceLines, err)
 		}
 	})
 	t.Run("one over fails", func(t *testing.T) {
-		writeTree(t, map[string]string{"over.go": goLines(maxFileLines + 1)})
+		writeTree(t, map[string]string{"over.go": goLines(maxSourceLines + 1)})
 		if err := CheckFileLength(nil); err == nil {
-			t.Fatalf("a file of %d lines passed", maxFileLines+1)
+			t.Fatalf("a file of %d lines passed", maxSourceLines+1)
 		}
 	})
 }
@@ -64,10 +80,10 @@ func TestCheckFileLengthBoundary(t *testing.T) {
 // first hit turns one fix into N build cycles.
 func TestCheckFileLengthReportsEveryViolation(t *testing.T) {
 	writeTree(t, map[string]string{
-		"a.go":       goLines(maxFileLines + 1),
-		"pkg/b.go":   goLines(maxFileLines + 100),
+		"a.go":       goLines(maxSourceLines + 1),
+		"pkg/b.go":   goLines(maxSourceLines + 100),
 		"pkg/ok.go":  goLines(10),
-		"pkg/c_x.go": goLines(maxFileLines + 2),
+		"pkg/c_x.go": goLines(maxSourceLines + 2),
 	})
 	err := CheckFileLength(nil)
 	if err == nil {
@@ -84,7 +100,7 @@ func TestCheckFileLengthReportsEveryViolation(t *testing.T) {
 }
 
 func TestCheckFileLengthHonoursAWaiver(t *testing.T) {
-	writeTree(t, map[string]string{"legacy.go": goLines(maxFileLines + 316)})
+	writeTree(t, map[string]string{"legacy.go": goLines(maxSourceLines + 316)})
 	if err := CheckFileLength([]string{"legacy.go"}); err != nil {
 		t.Fatalf("a waived file failed the gate: %v", err)
 	}
@@ -139,8 +155,8 @@ func TestCheckFileLengthSkipsAnExemptPath(t *testing.T) {
 	})
 	t.Run("by base name at any depth", func(t *testing.T) {
 		writeTree(t, map[string]string{
-			"a/adk.go": goLines(maxFileLines + 1),
-			"b/adk.go": goLines(maxFileLines + 1),
+			"a/adk.go": goLines(maxSourceLines + 1),
+			"b/adk.go": goLines(maxSourceLines + 1),
 		})
 		if err := CheckFileLength(nil, Skip{Name: "adk.go", Reason: "gopy output at any depth"}); err != nil {
 			t.Fatalf("a base-name skip did not apply at every depth: %v", err)
@@ -148,7 +164,7 @@ func TestCheckFileLengthSkipsAnExemptPath(t *testing.T) {
 	})
 	t.Run("by directory", func(t *testing.T) {
 		writeTree(t, map[string]string{
-			"third_party/dep/huge.go": goLines(maxFileLines + 800),
+			"third_party/dep/huge.go": goLines(maxSourceLines + 800),
 		})
 		if err := CheckFileLength(nil, Skip{Name: "third_party", Reason: "vendored tree outside skipDirs"}); err != nil {
 			t.Fatalf("a skipped directory was walked: %v", err)
@@ -179,7 +195,7 @@ func TestCheckFileLengthDoesNotStaleCheckASkip(t *testing.T) {
 // would let the skip win and leave the waiver permanently
 // unfalsifiable.
 func TestCheckFileLengthRejectsAPathThatIsBothWaiverAndSkip(t *testing.T) {
-	writeTree(t, map[string]string{"native/adk.go": goLines(maxFileLines + 1)})
+	writeTree(t, map[string]string{"native/adk.go": goLines(maxSourceLines + 1)})
 	for _, skip := range []string{"native/adk.go", "adk.go"} {
 		t.Run(skip, func(t *testing.T) {
 			err := CheckFileLength([]string{"native/adk.go"}, Skip{Name: skip, Reason: "generated"})
@@ -199,7 +215,7 @@ func TestCheckFileLengthRejectsAPathThatIsBothWaiverAndSkip(t *testing.T) {
 func TestCheckFileLengthSkipsGeneratedCode(t *testing.T) {
 	writeTree(t, map[string]string{
 		"gen.go": "// Code generated by protoc-gen-go. DO NOT EDIT.\n" +
-			goLines(maxFileLines+400),
+			goLines(maxSourceLines+400),
 	})
 	if err := CheckFileLength(nil); err != nil {
 		t.Fatalf("generated code was counted: %v", err)
@@ -212,8 +228,7 @@ func TestCheckFileLengthSkipsGeneratedCode(t *testing.T) {
 // hand-written source.
 func TestCheckFileLengthCountsAFileThatOnlyMentionsTheMarker(t *testing.T) {
 	writeTree(t, map[string]string{
-		"doc.go": "package p\n" +
-			strings.Repeat("// filler\n", maxFileLines) +
+		"doc.go": goLines(maxSourceLines+1) +
 			"// Code generated by hand. DO NOT EDIT.\n",
 	})
 	if err := CheckFileLength(nil); err == nil {
@@ -223,9 +238,9 @@ func TestCheckFileLengthCountsAFileThatOnlyMentionsTheMarker(t *testing.T) {
 
 func TestCheckFileLengthSkipsVendorAndNonGoFiles(t *testing.T) {
 	writeTree(t, map[string]string{
-		"vendor/dep/huge.go": goLines(maxFileLines + 700),
-		"data.json":          goLines(maxFileLines + 700),
-		"README.md":          goLines(maxFileLines + 700),
+		"vendor/dep/huge.go": goLines(maxSourceLines + 700),
+		"data.json":          goLines(maxSourceLines + 700),
+		"README.md":          goLines(maxSourceLines + 700),
 	})
 	if err := CheckFileLength(nil); err != nil {
 		t.Fatalf("vendored or non-Go files were counted: %v", err)
@@ -238,7 +253,7 @@ func TestCheckFileLengthSkipsVendorAndNonGoFiles(t *testing.T) {
 // would be a new carve-out invented by the gate rather than stated by
 // the rule.
 func TestCheckFileLengthCountsTestFiles(t *testing.T) {
-	writeTree(t, map[string]string{"big_test.go": goLines(maxFileLines + 39)})
+	writeTree(t, map[string]string{"big_test.go": goLines(maxSourceLines + 39)})
 	err := CheckFileLength(nil)
 	if err == nil {
 		t.Fatal("an over-limit test file was not reported")
@@ -252,7 +267,7 @@ func TestCheckFileLengthCountsTestFiles(t *testing.T) {
 // waiver can never match a walked path, so it is silently inert - and
 // silence from a gate is indistinguishable from a clean tree.
 func TestCheckFileLengthRejectsUnusableWaivers(t *testing.T) {
-	writeTree(t, map[string]string{"a.go": goLines(maxFileLines + 1)})
+	writeTree(t, map[string]string{"a.go": goLines(maxSourceLines + 1)})
 	for _, bad := range []string{"/abs/pkg/a.go", "../gapi/core/a.go", "./"} {
 		t.Run(bad, func(t *testing.T) {
 			err := CheckFileLength([]string{bad})
@@ -270,3 +285,96 @@ func TestCheckFileLengthRejectsUnusableWaivers(t *testing.T) {
 // at once in skip_test.go, because a per-gate copy of that table is the
 // same duplication one level up that let the two gates' skip parsing
 // drift apart in the first place (MAGELIB-DIV-004).
+
+// THE TWO CASES A REGEX GETS WRONG, WHICH IS WHY THE COUNT IS A
+// CALCULATION AND NOT A FILTER.
+//
+// MAGELIB-DIV-014 requires this be revert-proved against both, because a
+// fix that passes only on ordinary files has reproduced the defect it
+// replaces. Anything matching `^\s*//` calls the first case a comment
+// and never sees the second at all; go/scanner gets both from the
+// language's own definition.
+func TestSourceLinesCountsWhatARegexWouldMiscount(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		src  string
+		want int
+	}{
+		{
+			// A "//" inside a string is DATA, not a comment. A regex
+			// anchored on leading slashes calls this line a comment and
+			// undercounts.
+			name: "slashes inside a string literal",
+			src:  "package p\n\nvar u = \"//not-a-comment\"\n",
+			want: 2,
+		},
+		{
+			// A block comment spans lines without any of them starting
+			// with "//", so a line-oriented filter counts all four as
+			// source and OVERcounts.
+			name: "block comment spanning lines",
+			src:  "package p\n\n/*\nnot source\nstill not source\n*/\nvar x = 1\n",
+			want: 2,
+		},
+		{
+			// A raw string spanning lines IS source: the program carries
+			// those bytes and a reader holds them.
+			name: "raw string literal spanning lines",
+			src:  "package p\n\nvar s = `line one\nline two\nline three`\n",
+			want: 4,
+		},
+		{
+			// Trailing comments do not add a line; the code already did.
+			name: "code with a trailing comment",
+			src:  "package p\n\nvar y = 2 // explained\n",
+			want: 2,
+		},
+		{
+			name: "comments only",
+			src:  "// just a comment\n// and another\n",
+			want: 0,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sourceLines([]byte(tt.src)); got != tt.want {
+				t.Errorf("sourceLines = %d, want %d, for:\n%s", got, tt.want, tt.src)
+			}
+		})
+	}
+}
+
+// THE SECOND CEILING BOUNDS WHAT A READER OPENS, which the source count
+// deliberately does not.
+//
+// A source-line limit places no bound at all on file length: nothing in
+// a 400-source rule stops a 3000-line file that is mostly prose. The
+// rule is about cognitive load, and length is part of that even when
+// prose reduces the reconstruction it costs. So a file can fail on
+// EITHER ceiling, and the message says which.
+func TestCheckFileLengthBoundsReadingLengthSeparately(t *testing.T) {
+	// Well under the source ceiling, far over the raw one.
+	long := "package p\nvar v = 1\n" + strings.Repeat("// prose\n", maxRawLines)
+	writeTree(t, map[string]string{"wordy.go": long})
+
+	err := CheckFileLength(nil)
+	if err == nil {
+		t.Fatal("a file far over the reading ceiling passed on its source count alone")
+	}
+	if !strings.Contains(err.Error(), "lines to read") {
+		t.Fatalf("failure does not name the reading ceiling: %v", err)
+	}
+	if strings.Contains(err.Error(), "source lines") {
+		t.Fatalf("a file of 2 source lines was reported against the source ceiling: %v", err)
+	}
+}
+
+// A file under BOTH ceilings passes, which the test above cannot show on
+// its own - it could be satisfied by a gate that always fails.
+func TestCheckFileLengthAcceptsAProseHeavyFileUnderBothCeilings(t *testing.T) {
+	writeTree(t, map[string]string{
+		"documented.go": goLines(maxSourceLines) + strings.Repeat("// prose\n", 200),
+	})
+	if err := CheckFileLength(nil); err != nil {
+		t.Fatalf("a file at the source ceiling with 200 lines of prose failed: %v", err)
+	}
+}

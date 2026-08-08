@@ -53,7 +53,7 @@ func violatingTree(t *testing.T) {
 	t.Helper()
 	writeTree(t, map[string]string{
 		"over.go": "package p\n// Agent Programming Interface\n" +
-			strings.Repeat("// filler\n", maxFileLines),
+			goLines(maxSourceLines+1),
 	})
 }
 
@@ -122,7 +122,7 @@ func TestGatesAcceptAValidSkip(t *testing.T) {
 		t.Run(g.name, func(t *testing.T) {
 			writeTree(t, map[string]string{
 				"gen/over.go": "package p\n// Agent Programming Interface\n" +
-					strings.Repeat("// filler\n", maxFileLines),
+					strings.Repeat("// filler\n", maxSourceLines),
 			})
 			if err := g.run(Skip{Name: "gen", Reason: "generated output"}); err != nil {
 				t.Fatalf("a valid skip was rejected: %v", err)
