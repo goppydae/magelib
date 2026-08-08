@@ -259,7 +259,14 @@ func (Docs) Serve() error {
 // nothing compared to anything.
 func (Docs) Check() error {
 	mg.Deps(checkHermetic)
-	return magelib.CheckDocsDrift(docsConfig)
+	if err := magelib.CheckDocsDrift(docsConfig); err != nil {
+		return err
+	}
+	// MAGELIB-DIV-012. Wired HERE rather than into the Documentation
+	// workflow, because the entry's exit is explicit that a check running
+	// only in CI leaves local lint blind and does not close it. This is
+	// what gives Lint the site render it did not perform before.
+	return magelib.CheckRenderedH1(docsConfig)
 }
 
 // CheckVersion gates the VERSION file against the tag being cut.
