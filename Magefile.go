@@ -188,12 +188,23 @@ func Lint() error {
 	return magelib.Lint("G204", "G304")
 }
 
-// checkLedger gates this repo's ledgers' structure.
+// checkLedger gates this repo's ledgers' structure, and the closures
+// its own history has declared.
+//
+// STRUCTURE AND CLOSURE ARE DIFFERENT QUESTIONS. CheckDivergence asks
+// whether an entry is well formed; CheckLedgerClosures asks whether a
+// commit that declared an entry closed was telling the truth. An entry
+// can be perfectly shaped and months overdue.
 func checkLedger() error {
 	if err := magelib.CheckDivergence("divergence.jsonl"); err != nil {
 		return err
 	}
-	return magelib.CheckDeprecation("deprecation.jsonl")
+	if err := magelib.CheckDeprecation("deprecation.jsonl"); err != nil {
+		return err
+	}
+	return magelib.CheckLedgerClosures(magelib.LedgerClosureConfig{
+		Path: "divergence.jsonl",
+	})
 }
 
 // Doctor validates the dev shell against the ecosystem pins.
